@@ -1,0 +1,37 @@
+{
+  "entities": {
+    "Project": {
+      "title": "Project",
+      "description": "A saved social media project.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "prompt": { "type": "string" },
+        "platform": { "type": "string" },
+        "aspectRatio": { "type": "string" },
+        "themeSettings": {
+          "type": "object",
+          "properties": {
+            "primaryColor": { "type": "string" },
+            "fontSize": { "type": "number" },
+            "style": { "type": "string" }
+          }
+        },
+        "cards": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "createdAt": { "type": "number", "description": "Timestamp" },
+        "updatedAt": { "type": "number", "description": "Timestamp" }
+      },
+      "required": ["userId", "prompt", "platform", "aspectRatio", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/Project" },
+      "description": "User's saved social media projects"
+    }
+  }
+}
