@@ -40,20 +40,22 @@ export default function LoginPage() {
         <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center mx-auto mb-6 text-blue-600">
           <LayoutTemplate className="w-8 h-8" />
         </div>
-        
+
         <h1 className="text-2xl font-bold mb-2">Welcome Back</h1>
-        <p className="text-gray-500 mb-8">Sign in to sync your Social Media Studio projects to the cloud.</p>
-        
-        <Button 
-          size="lg" 
-          className="w-full h-14 text-base" 
+        <p className="text-gray-500 mb-8">
+          Sign in to sync your Social Media Studio projects to the cloud.
+        </p>
+
+        <Button
+          size="lg"
+          className="w-full h-14 text-base"
           onClick={handleGoogleSignIn}
           disabled={isSigningIn}
         >
           <Chrome className="w-5 h-5 mr-3" />
           {isSigningIn ? "Signing in..." : "Continue with Google"}
         </Button>
-        
+
         <p className="mt-6 text-xs text-gray-400">
           By signing in, you agree to our Terms of Service and Privacy Policy.
         </p>

@@ -7,7 +7,7 @@ import { collection, query, getDocs, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useStudioStore } from "@/store/useStudioStore";
 import { Button } from "@/components/ui/button";
-import { LayoutTemplate, Plus, Calendar, Settings2, Trash2 } from "lucide-react";
+import { LayoutTemplate, Plus, Calendar, Settings2 } from "lucide-react";
 import { format } from "date-fns";
 
 export default function ProjectsPage() {
@@ -15,15 +15,16 @@ export default function ProjectsPage() {
   const router = useRouter();
   const [projects, setProjects] = useState<any[]>([]);
   const [fetching, setFetching] = useState(true);
-  
-  const loadProjectToStudio = useStudioStore(s => (projectData: any) => {
+
+  const loadProjectToStudio = useStudioStore((s) => (projectData: any) => {
     s.setProjectId(projectData.id);
     s.setPrompt(projectData.prompt);
     s.setPlatform(projectData.platform);
     s.setAspectRatio(projectData.aspectRatio);
     if (projectData.themeSettings) s.updateTheme(projectData.themeSettings);
     if (projectData.cards) s.setCards(projectData.cards);
-    if (projectData.cards?.length > 0) s.setActiveCardId(projectData.cards[0].id);
+    if (projectData.cards?.length > 0)
+      s.setActiveCardId(projectData.cards[0].id);
     router.push("/studio");
   });
 
@@ -31,12 +32,14 @@ export default function ProjectsPage() {
     const fetchProjects = async () => {
       if (!user) return;
       try {
-        const q = query(
-          collection(db, `users/${user.uid}/projects`),
-        );
+        const q = query(collection(db, `users/${user.uid}/projects`));
         const snap = await getDocs(q);
-        const data = snap.docs.map(d => ({ ...d.data() }));
-        data.sort((a,b) => (b.updatedAt?.toMillis ? b.updatedAt.toMillis() : 0) - (a.updatedAt?.toMillis ? a.updatedAt.toMillis() : 0));
+        const data = snap.docs.map((d) => ({ ...d.data() }));
+        data.sort(
+          (a, b) =>
+            (b.updatedAt?.toMillis ? b.updatedAt.toMillis() : 0) -
+            (a.updatedAt?.toMillis ? a.updatedAt.toMillis() : 0),
+        );
         setProjects(data);
       } catch (e) {
         console.error(e);
@@ -62,13 +65,20 @@ export default function ProjectsPage() {
       <div className="max-w-6xl mx-auto space-y-8">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Recent Projects</h1>
-            <p className="text-gray-500 mt-2">Manage all your generated social media content in one place.</p>
+            <h1 className="text-3xl font-bold tracking-tight">
+              Recent Projects
+            </h1>
+            <p className="text-gray-500 mt-2">
+              Manage all your generated social media content in one place.
+            </p>
           </div>
-          <Button onClick={() => {
-            useStudioStore.getState().reset();
-            router.push("/studio");
-          }} className="bg-blue-600 hover:bg-blue-700">
+          <Button
+            onClick={() => {
+              useStudioStore.getState().reset();
+              router.push("/studio");
+            }}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
             <Plus className="w-4 h-4 mr-2" /> New Project
           </Button>
         </div>
@@ -79,18 +89,18 @@ export default function ProjectsPage() {
               <LayoutTemplate className="w-8 h-8 text-blue-500" />
             </div>
             <h3 className="text-lg font-semibold mb-2">No projects yet</h3>
-            <p className="text-gray-500 mb-6">Create your first carousel or post to see it here.</p>
-            <Button onClick={() => router.push("/studio")}>
-              Create Now
-            </Button>
+            <p className="text-gray-500 mb-6">
+              Create your first carousel or post to see it here.
+            </p>
+            <Button onClick={() => router.push("/studio")}>Create Now</Button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {projects.map(p => (
-              <div 
-                key={p.id} 
+            {projects.map((p) => (
+              <div
+                key={p.id}
                 onClick={() => loadProjectToStudio(p)}
-                 className="group bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-gray-100 dark:border-zinc-800 shadow-sm hover:shadow-md transition-all cursor-pointer relative overflow-hidden"
+                className="group bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-gray-100 dark:border-zinc-800 shadow-sm hover:shadow-md transition-all cursor-pointer relative overflow-hidden"
               >
                 <div className="flex justify-between items-start mb-4">
                   <div className="bg-gray-100 dark:bg-zinc-800 text-xs px-2 py-1 rounded-md font-medium text-gray-700 dark:text-gray-300">
@@ -98,14 +108,16 @@ export default function ProjectsPage() {
                   </div>
                   <div className="text-xs text-gray-400 flex items-center">
                     <Calendar className="w-3 h-3 mr-1" />
-                    {p.updatedAt?.toDate ? format(p.updatedAt.toDate(), 'MMM d, yyyy') : 'Recently'}
+                    {p.updatedAt?.toDate
+                      ? format(p.updatedAt.toDate(), "MMM d, yyyy")
+                      : "Recently"}
                   </div>
                 </div>
-                
+
                 <h3 className="font-semibold text-lg line-clamp-2 mb-2 group-hover:text-blue-600 transition-colors">
                   {p.prompt || "Untitled Project"}
                 </h3>
-                
+
                 <div className="mt-6 flex items-center text-sm text-gray-500">
                   <Settings2 className="w-4 h-4 mr-1.5" />
                   {p.cards?.length || 0} cards • Aspect: {p.aspectRatio}

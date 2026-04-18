@@ -3,23 +3,27 @@ import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
-    let key = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
+    let key =
+      process.env.GEMINI_API_KEY ||
+      process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
+      "";
     // Clean up accidental quotes or whitespace from the environment variable mapping
-    key = key.replace(/['"]/g, '').trim();
+    key = key.replace(/['"]/g, "").trim();
 
     if (!key) {
       console.error("API Key is missing from the environment.");
     }
-    
+
     const ai = new GoogleGenAI({ apiKey: key });
     const { prompt, tone, platform, aspectRatio, numCards } = await req.json();
 
     const systemInstruction = `You are an expert social media manager and content creator.
-You must generate a set of ${numCards} cards for a ${platform} post.
-Keep the tone: ${tone}.
-Make sure the content is highly engaging, viral-worthy, and perfectly suited for ${platform}.
-Generate a short imagePrompt for each card that could be used by an AI image generator to create a visually matching background or illustration.
-The visual aspect ratio will be ${aspectRatio}.`;
+      You must generate a set of ${numCards} cards for a ${platform} post.
+      Keep the tone: ${tone}.
+      Make sure the content is highly engaging, viral-worthy, and perfectly suited for ${platform}.
+      Generate a short imagePrompt for each card that could be used by an AI image generator to create a visually matching background or illustration.
+      The visual aspect ratio will be ${aspectRatio}.
+    `;
 
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
@@ -42,7 +46,8 @@ The visual aspect ratio will be ${aspectRatio}.`;
               },
               imagePrompt: {
                 type: Type.STRING,
-                description: "A detailed AI image generation prompt for the background or accompanying image.",
+                description:
+                  "A detailed AI image generation prompt for the background or accompanying image.",
               },
             },
             required: ["title", "content", "imagePrompt"],
@@ -58,9 +63,11 @@ The visual aspect ratio will be ${aspectRatio}.`;
 
     const cards = JSON.parse(text);
     return NextResponse.json({ cards });
-
   } catch (error) {
     console.error("Gemini Content Generate Error:", error);
-    return NextResponse.json({ error: "Failed to generate content" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to generate content" },
+      { status: 500 },
+    );
   }
 }

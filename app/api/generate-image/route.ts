@@ -3,14 +3,17 @@ import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
-    let key = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
+    let key =
+      process.env.GEMINI_API_KEY ||
+      process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
+      "";
     // Clean up accidental quotes or whitespace from the environment variable mapping
-    key = key.replace(/['"]/g, '').trim();
+    key = key.replace(/['"]/g, "").trim();
 
     if (!key) {
       console.error("API Key is missing from the environment.");
     }
-    
+
     const ai = new GoogleGenAI({ apiKey: key });
     const { prompt, aspectRatio } = await req.json();
 
@@ -34,15 +37,15 @@ export async function POST(req: Request) {
       config: {
         imageConfig: {
           aspectRatio: geminiRatio,
-          imageSize: "1K"
-        }
+          imageSize: "1K",
+        },
       },
     });
 
     for (const part of response.candidates?.[0]?.content?.parts || []) {
       if (part.inlineData) {
         const base64EncodeString = part.inlineData.data;
-        const imageUrl = `data:${part.inlineData.mimeType || 'image/png'};base64,${base64EncodeString}`;
+        const imageUrl = `data:${part.inlineData.mimeType || "image/png"};base64,${base64EncodeString}`;
         return NextResponse.json({ imageUrl });
       }
     }
@@ -50,6 +53,9 @@ export async function POST(req: Request) {
     throw new Error("No image data returned from model");
   } catch (error) {
     console.error("Gemini Image Generate Error:", error);
-    return NextResponse.json({ error: "Failed to generate image" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to generate image" },
+      { status: 500 },
+    );
   }
 }

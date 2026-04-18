@@ -14,7 +14,17 @@ import { toast } from "sonner";
 import { exportToPNG, exportToPDF } from "@/lib/export";
 
 export function RightSidebar() {
-  const { themeSettings, updateTheme, cards, prompt, tone, platform, aspectRatio, projectId, setProjectId } = useStudioStore();
+  const {
+    themeSettings,
+    updateTheme,
+    cards,
+    prompt,
+    tone,
+    platform,
+    aspectRatio,
+    projectId,
+    setProjectId,
+  } = useStudioStore();
   const { user } = useAuth();
 
   const handleSaveProject = async () => {
@@ -30,7 +40,7 @@ export function RightSidebar() {
     try {
       const pId = projectId || crypto.randomUUID();
       const projectRef = doc(db, `users/${user.uid}/projects/${pId}`);
-      
+
       if (!projectId) {
         await setDoc(projectRef, {
           id: pId,
@@ -45,18 +55,22 @@ export function RightSidebar() {
         });
         setProjectId(pId);
       } else {
-        await setDoc(projectRef, {
-          id: pId,
-          userId: user.uid,
-          prompt,
-          platform,
-          aspectRatio,
-          themeSettings,
-          cards,
-          updatedAt: serverTimestamp(),
-        }, { merge: true });
+        await setDoc(
+          projectRef,
+          {
+            id: pId,
+            userId: user.uid,
+            prompt,
+            platform,
+            aspectRatio,
+            themeSettings,
+            cards,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true },
+        );
       }
-      
+
       toast.success("Project saved securely to cloud!");
     } catch (e: any) {
       toast.error("Failed to save: " + e.message);
@@ -66,18 +80,18 @@ export function RightSidebar() {
   const handleExportPNG = async () => {
     if (cards.length === 0) return;
     toast.promise(exportToPNG(), {
-      loading: 'Preparing PNGs...',
-      success: 'Exported successfully!',
-      error: 'Failed to export',
+      loading: "Preparing PNGs...",
+      success: "Exported successfully!",
+      error: "Failed to export",
     });
   };
 
   const handleExportPDF = async () => {
     if (cards.length === 0) return;
     toast.promise(exportToPDF(), {
-      loading: 'Preparing PDF document...',
-      success: 'Exported successfully!',
-      error: 'Failed to export',
+      loading: "Preparing PDF document...",
+      success: "Exported successfully!",
+      error: "Failed to export",
     });
   };
 
@@ -89,31 +103,40 @@ export function RightSidebar() {
         <div className="space-y-3">
           <Label>Primary Color</Label>
           <div className="flex gap-3 items-center">
-            <Input 
-              type="color" 
+            <Input
+              type="color"
               value={themeSettings.primaryColor}
               onChange={(e) => updateTheme({ primaryColor: e.target.value })}
               className="p-1 h-10 w-20 cursor-pointer"
             />
-            <div className="text-sm font-mono text-gray-500">{themeSettings.primaryColor}</div>
+            <div className="text-sm font-mono text-gray-500">
+              {themeSettings.primaryColor}
+            </div>
           </div>
         </div>
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <Label>Base Font Size</Label>
-            <span className="text-sm font-medium">{themeSettings.fontSize}px</span>
+            <span className="text-sm font-medium">
+              {themeSettings.fontSize}px
+            </span>
           </div>
-          <Slider 
-            value={[themeSettings.fontSize]} 
-            min={12} max={32} step={1}
+          <Slider
+            value={[themeSettings.fontSize]}
+            min={12}
+            max={32}
+            step={1}
             onValueChange={(val) => updateTheme({ fontSize: val[0] })}
           />
         </div>
 
         <div className="space-y-3">
           <Label>Design Style</Label>
-          <Tabs value={themeSettings.style} onValueChange={(v) => updateTheme({ style: v })}>
+          <Tabs
+            value={themeSettings.style}
+            onValueChange={(v) => updateTheme({ style: v })}
+          >
             <TabsList className="w-full grid grid-cols-2">
               <TabsTrigger value="minimal">Minimal</TabsTrigger>
               <TabsTrigger value="bold">Bold</TabsTrigger>
@@ -123,13 +146,25 @@ export function RightSidebar() {
       </div>
 
       <div className="mt-8 pt-6 border-t border-gray-100 dark:border-zinc-800 space-y-3">
-        <Button variant="outline" className="w-full justify-start" onClick={handleSaveProject}>
+        <Button
+          variant="outline"
+          className="w-full justify-start"
+          onClick={handleSaveProject}
+        >
           <Save className="w-4 h-4 mr-2" /> Save to Cloud
         </Button>
-        <Button variant="default" className="w-full justify-start bg-blue-600 hover:bg-blue-700 text-white" onClick={handleExportPNG}>
+        <Button
+          variant="default"
+          className="w-full justify-start bg-blue-600 hover:bg-blue-700 text-white"
+          onClick={handleExportPNG}
+        >
           <Download className="w-4 h-4 mr-2" /> Export as PNG
         </Button>
-        <Button variant="secondary" className="w-full justify-start" onClick={handleExportPDF}>
+        <Button
+          variant="secondary"
+          className="w-full justify-start"
+          onClick={handleExportPDF}
+        >
           <Download className="w-4 h-4 mr-2" /> Export as PDF
         </Button>
       </div>

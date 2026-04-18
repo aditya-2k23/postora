@@ -28,6 +28,7 @@ APP_URL="http://localhost:3000"
 ```
 
 2. Initialize your `firebase-applet-config.json` with your Firebase project properties:
+
 ```json
 {
   "projectId": "your-firebase-projectId",
@@ -42,11 +43,3 @@ APP_URL="http://localhost:3000"
 4. Set up standard Firestore security rules enforcing read/write mapping per `userId`.
 
 5. Run `npm run dev` and navigate to `http://localhost:3000`.
-
-## Deployment
-
-Deploying this project to Vercel is highly recommended:
-1. Push your repository to GitHub.
-2. Link your repository inside your Vercel Dashboard.
-3. In the "Environment Variables" section of Vercel, inject the keys above.
-4. Click Deploy. Ensure your App URL points to your Vercel deployment link rather than localhost.
