@@ -1,20 +1,52 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Social Media Studio
 
-# Run and deploy your AI Studio app
+An AI-powered social media post and carousel creator using Next.js 15, Tailwind, Shadcn UI, Zustand, Firebase, and Gemini API.
 
-This contains everything you need to run your app locally.
+## Core Features
 
-View your app in AI Studio: https://ai.studio/apps/43af5dcf-c08d-436a-ac5d-ae36bb99dcab
+- **Text-to-Carousel**: Translates prompts into highly engaging, multi-card formats.
+- **Auto-Formatting**: Instantly formats your post for Square (1:1), Portrait (4:5), Landscape (16:9), or Reel/Story (9:16).
+- **Drag & Drop**: Rapidly re-order the slides utilizing `dnd-kit`.
+- **Full Client-side Exports**: Highly optimized SVG to PNG/PDF export natively supported via `html-to-image` and `jsPDF`.
+- **Cloud Saving**: All generated states persist reliably into Firebase Firestore, enabling multi-device synchronization based on your authenticated session.
 
-## Run Locally
+## Tech Stack & Architecture
 
-**Prerequisites:**  Node.js
+- **Next.js 15 (App Router)**: Orchestrates server API routes preserving backend secrets away from the client browser.
+- **Zustand (`store/useStudioStore.ts`)**: Powers the intricate canvas state. Implements `persist` middleware for local caching.
+- **Tailwind CSS & Shadcn UI**: Flexible design system.
+- **Firebase Firestore & Auth**: Secure cloud storage mapping records against authenticated user scopes.
+- **Google GenAI SDK**: Uses `gemini-3-flash-preview` and `gemini-3.1-flash-image-preview` for content and graphics.
 
+## Quick Start
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+1. Provide the following inside `.env.local`:
+
+```bash
+NEXT_PUBLIC_GEMINI_API_KEY="YOUR_GEMINI_API_KEY"
+APP_URL="http://localhost:3000"
+```
+
+2. Initialize your `firebase-applet-config.json` with your Firebase project properties:
+```json
+{
+  "projectId": "your-firebase-projectId",
+  "appId": "your-app-id",
+  "apiKey": "your-firebase-web-api-key",
+  "authDomain": "your-firebase-projectId.firebaseapp.com",
+  "firestoreDatabaseId": "(default)"
+}
+```
+
+3. Enable **Google Sign-In** within your Firebase Console `Authentication` menu.
+4. Set up standard Firestore security rules enforcing read/write mapping per `userId`.
+
+5. Run `npm run dev` and navigate to `http://localhost:3000`.
+
+## Deployment
+
+Deploying this project to Vercel is highly recommended:
+1. Push your repository to GitHub.
+2. Link your repository inside your Vercel Dashboard.
+3. In the "Environment Variables" section of Vercel, inject the keys above.
+4. Click Deploy. Ensure your App URL points to your Vercel deployment link rather than localhost.

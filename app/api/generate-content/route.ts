@@ -3,7 +3,15 @@ import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY });
+    let key = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
+    // Clean up accidental quotes or whitespace from the environment variable mapping
+    key = key.replace(/['"]/g, '').trim();
+
+    if (!key) {
+      console.error("API Key is missing from the environment.");
+    }
+    
+    const ai = new GoogleGenAI({ apiKey: key });
     const { prompt, tone, platform, aspectRatio, numCards } = await req.json();
 
     const systemInstruction = `You are an expert social media manager and content creator.
@@ -14,7 +22,7 @@ Generate a short imagePrompt for each card that could be used by an AI image gen
 The visual aspect ratio will be ${aspectRatio}.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.1-flash-preview",
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
         systemInstruction,

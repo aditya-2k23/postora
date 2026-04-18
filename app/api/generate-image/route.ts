@@ -3,7 +3,15 @@ import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY });
+    let key = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
+    // Clean up accidental quotes or whitespace from the environment variable mapping
+    key = key.replace(/['"]/g, '').trim();
+
+    if (!key) {
+      console.error("API Key is missing from the environment.");
+    }
+    
+    const ai = new GoogleGenAI({ apiKey: key });
     const { prompt, aspectRatio } = await req.json();
 
     // Map user aspect ratio to supported ones

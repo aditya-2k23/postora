@@ -1,10 +1,10 @@
 {
-  "projectId": "gen-lang-client-0258690028",
-  "appId": "1:1061491816929:web:c81ca985502d3c9501baa0",
-  "apiKey": "AIzaSyBjxfQu4zuB0OfU0wAhWBZoEXXL3R_vNKY",
-  "authDomain": "gen-lang-client-0258690028.firebaseapp.com",
+  "projectId": "postora-7806e",
+  "appId": "1:702169358953:web:b76740cc0a92553d4f78f8",
+  "apiKey": "AIzaSyA75L1joviMusHzdaZf1qZx1-Kj9PA8av4",
+  "authDomain": "postora-7806e.firebaseapp.com",
   "firestoreDatabaseId": "ai-studio-43af5dcf-c08d-436a-ac5d-ae36bb99dcab",
-  "storageBucket": "gen-lang-client-0258690028.firebasestorage.app",
-  "messagingSenderId": "1061491816929",
+  "storageBucket": "postora-7806e.firebasestorage.app",
+  "messagingSenderId": "702169358953",
   "measurementId": ""
 }
