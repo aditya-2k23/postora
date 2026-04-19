@@ -93,11 +93,59 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    scrollbar-width: thin;
+    scrollbar-color: oklch(0.7 0.01 75 / 0.4) transparent;
   }
   body {
     @apply bg-background text-foreground;
   }
   html {
     @apply font-sans;
+  }
+
+  /* Cursor pointer on all interactive elements */
+  button,
+  [role="button"],
+  a,
+  select,
+  input[type="checkbox"],
+  input[type="radio"],
+  input[type="submit"],
+  input[type="button"],
+  [data-slot="slider-thumb"] {
+    cursor: pointer;
+  }
+
+  /* ─── Custom Scrollbar (WebKit) ─── */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.7 0.01 75 / 0.4);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.6 0.02 75 / 0.6);
+  }
+
+  /* Dark mode scrollbar */
+  .dark ::-webkit-scrollbar-thumb {
+    background: oklch(0.45 0.01 75 / 0.4);
+  }
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.55 0.01 75 / 0.6);
+  }
+  .dark * {
+    scrollbar-color: oklch(0.45 0.01 75 / 0.4) transparent;
+  }
+
+  /* ─── Studio Accent Color Override ─── */
+  .studio-accent-scope {
+    --primary: var(--studio-accent);
+    --ring: var(--studio-accent);
   }
 }

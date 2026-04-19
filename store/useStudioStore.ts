@@ -15,6 +15,11 @@ export type ThemeSettings = {
   style: string;
 };
 
+export type ChatMessage = {
+  role: "user" | "ai";
+  text: string;
+};
+
 interface StudioState {
   prompt: string;
   tone: string;
@@ -26,6 +31,13 @@ interface StudioState {
   themeSettings: ThemeSettings;
   isGenerating: boolean;
   projectId: string | null;
+
+  // Chat history
+  chatHistory: ChatMessage[];
+
+  // Undo/Redo
+  undoStack: SocialCard[][];
+  redoStack: SocialCard[][];
 
   setPrompt: (prompt: string) => void;
   setTone: (tone: string) => void;
@@ -39,6 +51,10 @@ interface StudioState {
   updateTheme: (updates: Partial<ThemeSettings>) => void;
   setIsGenerating: (isGenerating: boolean) => void;
   setProjectId: (id: string | null) => void;
+  addChatMessage: (message: ChatMessage) => void;
+  pushUndo: () => void;
+  undo: () => void;
+  redo: () => void;
   reset: () => void;
 }
 
@@ -61,6 +77,9 @@ export const useStudioStore = create<StudioState>()(
       themeSettings: defaultTheme,
       isGenerating: false,
       projectId: null,
+      chatHistory: [],
+      undoStack: [],
+      redoStack: [],
 
       setPrompt: (prompt) => set({ prompt }),
       setTone: (tone) => set({ tone }),
@@ -91,12 +110,53 @@ export const useStudioStore = create<StudioState>()(
         })),
       setIsGenerating: (isGenerating) => set({ isGenerating }),
       setProjectId: (projectId) => set({ projectId }),
+
+      addChatMessage: (message) =>
+        set((state) => ({
+          chatHistory: [...state.chatHistory, message],
+        })),
+
+      pushUndo: () =>
+        set((state) => ({
+          undoStack: [...state.undoStack, structuredClone(state.cards)],
+          redoStack: [],
+        })),
+
+      undo: () =>
+        set((state) => {
+          if (state.undoStack.length === 0) return state;
+          const newUndo = [...state.undoStack];
+          const prev = newUndo.pop()!;
+          return {
+            undoStack: newUndo,
+            redoStack: [...state.redoStack, structuredClone(state.cards)],
+            cards: prev,
+            activeCardId: prev.length > 0 ? prev[0].id : null,
+          };
+        }),
+
+      redo: () =>
+        set((state) => {
+          if (state.redoStack.length === 0) return state;
+          const newRedo = [...state.redoStack];
+          const next = newRedo.pop()!;
+          return {
+            redoStack: newRedo,
+            undoStack: [...state.undoStack, structuredClone(state.cards)],
+            cards: next,
+            activeCardId: next.length > 0 ? next[0].id : null,
+          };
+        }),
+
       reset: () =>
         set({
           prompt: "",
           cards: [],
           activeCardId: null,
           projectId: null,
+          chatHistory: [],
+          undoStack: [],
+          redoStack: [],
         }),
     }),
     {
@@ -109,6 +169,7 @@ export const useStudioStore = create<StudioState>()(
         numCards: state.numCards,
         cards: state.cards,
         themeSettings: state.themeSettings,
+        chatHistory: state.chatHistory,
       }),
     },
   ),
