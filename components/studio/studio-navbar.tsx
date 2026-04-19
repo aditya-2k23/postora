@@ -1,5 +1,7 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
+
 import { useStudioStore } from "@/store/useStudioStore";
 import { getAccessibleTextColor } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -16,9 +18,14 @@ import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { toast } from "sonner";
 import { exportToPNG, exportToPDF } from "@/lib/export";
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useCanvasStore } from "@/store/useCanvasStore";
 
 export function StudioNavbar() {
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
   const {
     cards,
     prompt,
@@ -30,11 +37,12 @@ export function StudioNavbar() {
     setProjectId,
   } = useStudioStore();
   const { user } = useAuth();
-  const { theme, setTheme, resolvedTheme } = useTheme();
-
-  // Hydration fix — avoid SSR/client mismatch on theme-dependent icon
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const { setTheme, resolvedTheme } = useTheme();
+  const slidesByCardId = useCanvasStore((s) => s.slidesByCardId);
+  const currentSlideId = useCanvasStore((s) => s.currentSlideId);
+  const activeTool = useCanvasStore((s) => s.activeTool);
+  const gridEnabled = useCanvasStore((s) => s.gridEnabled);
+  const rulerEnabled = useCanvasStore((s) => s.rulerEnabled);
 
   const handleSaveProject = async () => {
     if (!user) {
@@ -49,6 +57,13 @@ export function StudioNavbar() {
     try {
       const pId = projectId || crypto.randomUUID();
       const projectRef = doc(db, `users/${user.uid}/projects/${pId}`);
+      const canvasState = {
+        slidesByCardId,
+        currentSlideId,
+        activeTool,
+        gridEnabled,
+        rulerEnabled,
+      };
 
       if (!projectId) {
         await setDoc(projectRef, {
@@ -59,6 +74,7 @@ export function StudioNavbar() {
           aspectRatio,
           themeSettings,
           cards,
+          canvas: canvasState,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
@@ -74,6 +90,7 @@ export function StudioNavbar() {
             aspectRatio,
             themeSettings,
             cards,
+            canvas: canvasState,
             updatedAt: serverTimestamp(),
           },
           { merge: true },
@@ -118,7 +135,10 @@ export function StudioNavbar() {
       <div className="flex items-center gap-2.5">
         <div
           className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm shadow-md"
-          style={{ backgroundColor: accentColor, color: getAccessibleTextColor(accentColor) }}
+          style={{
+            backgroundColor: accentColor,
+            color: getAccessibleTextColor(accentColor),
+          }}
         >
           AI
         </div>
@@ -136,14 +156,12 @@ export function StudioNavbar() {
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
           onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
         >
-          {mounted ? (
-            resolvedTheme === "dark" ? (
-              <Sun className="w-4 h-4" />
-            ) : (
-              <Moon className="w-4 h-4" />
-            )
+          {mounted && resolvedTheme === "dark" ? (
+            <Sun className="w-4 h-4" />
+          ) : mounted ? (
+            <Moon className="w-4 h-4" />
           ) : (
-            <span className="w-4 h-4" />
+            <span className="w-4 h-4" aria-hidden />
           )}
         </Button>
 
@@ -161,18 +179,27 @@ export function StudioNavbar() {
         <DropdownMenu>
           <DropdownMenuTrigger
             className="inline-flex items-center justify-center h-8 px-3 text-xs gap-1.5 shadow-sm rounded-md font-medium transition-colors hover:opacity-90"
-            style={{ backgroundColor: accentColor, color: getAccessibleTextColor(accentColor) }}
+            style={{
+              backgroundColor: accentColor,
+              color: getAccessibleTextColor(accentColor),
+            }}
           >
             <Download className="w-3.5 h-3.5" />
             Export
             <ChevronDown className="w-3 h-3" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuItem onClick={handleExportPNG} className="cursor-pointer">
+            <DropdownMenuItem
+              onClick={handleExportPNG}
+              className="cursor-pointer"
+            >
               <Download className="w-3.5 h-3.5 mr-2" />
               Export as PNG
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleExportPDF} className="cursor-pointer">
+            <DropdownMenuItem
+              onClick={handleExportPDF}
+              className="cursor-pointer"
+            >
               <Download className="w-3.5 h-3.5 mr-2" />
               Export as PDF
             </DropdownMenuItem>

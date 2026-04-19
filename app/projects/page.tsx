@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { useRouter } from "next/navigation";
-import { collection, query, getDocs, orderBy } from "firebase/firestore";
+import { collection, query, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useStudioStore } from "@/store/useStudioStore";
+import { useCanvasStore } from "@/store/useCanvasStore";
 import { Button } from "@/components/ui/button";
 import { LayoutTemplate, Plus, Calendar, Settings2 } from "lucide-react";
 import { format } from "date-fns";
@@ -16,17 +17,57 @@ export default function ProjectsPage() {
   const [projects, setProjects] = useState<any[]>([]);
   const [fetching, setFetching] = useState(true);
 
-  const loadProjectToStudio = useStudioStore((s) => (projectData: any) => {
-    s.setProjectId(projectData.id);
-    s.setPrompt(projectData.prompt);
-    s.setPlatform(projectData.platform);
-    s.setAspectRatio(projectData.aspectRatio);
-    if (projectData.themeSettings) s.updateTheme(projectData.themeSettings);
-    if (projectData.cards) s.setCards(projectData.cards);
-    if (projectData.cards?.length > 0)
-      s.setActiveCardId(projectData.cards[0].id);
-    router.push("/studio");
-  });
+  const setProjectId = useStudioStore((s) => s.setProjectId);
+  const setPrompt = useStudioStore((s) => s.setPrompt);
+  const setPlatform = useStudioStore((s) => s.setPlatform);
+  const setAspectRatio = useStudioStore((s) => s.setAspectRatio);
+  const updateTheme = useStudioStore((s) => s.updateTheme);
+  const setCards = useStudioStore((s) => s.setCards);
+  const setActiveCardId = useStudioStore((s) => s.setActiveCardId);
+
+  const loadProjectToStudio = useCallback(
+    (projectData: any) => {
+      setProjectId(projectData.id);
+      setPrompt(projectData.prompt);
+      setPlatform(projectData.platform);
+      setAspectRatio(projectData.aspectRatio);
+      if (projectData.themeSettings) updateTheme(projectData.themeSettings);
+      if (projectData.cards) setCards(projectData.cards);
+      const preferredSlideId =
+        projectData.canvas?.currentSlideId ??
+        projectData.cards?.[0]?.id ??
+        null;
+      if (preferredSlideId) {
+        setActiveCardId(preferredSlideId);
+      }
+
+      if (projectData.canvas) {
+        useCanvasStore.setState((state) => ({
+          slidesByCardId:
+            projectData.canvas.slidesByCardId ?? state.slidesByCardId,
+          currentSlideId:
+            projectData.canvas.currentSlideId ??
+            projectData.cards?.[0]?.id ??
+            null,
+          activeTool: projectData.canvas.activeTool ?? state.activeTool,
+          gridEnabled: Boolean(projectData.canvas.gridEnabled),
+          rulerEnabled: Boolean(projectData.canvas.rulerEnabled),
+        }));
+      }
+
+      router.push("/studio");
+    },
+    [
+      router,
+      setActiveCardId,
+      setAspectRatio,
+      setCards,
+      setPlatform,
+      setProjectId,
+      setPrompt,
+      updateTheme,
+    ],
+  );
 
   useEffect(() => {
     const fetchProjects = async () => {

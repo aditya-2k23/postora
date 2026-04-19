@@ -124,7 +124,11 @@ export const useStudioStore = create<StudioState>()(
           newCards.splice(newIndex, 0, moved);
           return { cards: newCards };
         }),
-      setActiveCardId: (activeCardId) => set({ activeCardId }),
+      setActiveCardId: (activeCardId) =>
+        set((state) => {
+          if (state.activeCardId === activeCardId) return state;
+          return { activeCardId };
+        }),
       updateTheme: (updates) =>
         set((state) => ({
           themeSettings: { ...state.themeSettings, ...updates },

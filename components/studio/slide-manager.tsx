@@ -20,6 +20,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, X } from "lucide-react";
 import { useState } from "react";
+import { useCanvasStore } from "@/store/useCanvasStore";
 
 function SortableThumbnail({
   card,
@@ -63,7 +64,10 @@ function SortableThumbnail({
           aspectRatio: ratio || 1,
           ...style,
           ...(isActive
-            ? { borderColor: accentColor, boxShadow: `0 4px 12px ${accentColor}33` }
+            ? {
+                borderColor: accentColor,
+                boxShadow: `0 4px 12px ${accentColor}33`,
+              }
             : {}),
         }}
       >
@@ -94,9 +98,21 @@ function SortableThumbnail({
 }
 
 export function SlideManager() {
-  const { cards, activeCardId, setActiveCardId, setCards, aspectRatio, themeSettings } =
-    useStudioStore();
+  const {
+    cards,
+    activeCardId,
+    setActiveCardId,
+    setCards,
+    aspectRatio,
+    themeSettings,
+  } = useStudioStore();
+  const setCurrentSlideId = useCanvasStore((s) => s.setCurrentSlideId);
   const [showHint, setShowHint] = useState(true);
+
+  const selectSlide = (cardId: string) => {
+    setActiveCardId(cardId);
+    setCurrentSlideId(cardId);
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -106,7 +122,7 @@ export function SlideManager() {
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-    })
+    }),
   );
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -121,11 +137,13 @@ export function SlideManager() {
   if (cards.length === 0) return null;
 
   return (
-    <div className="border-t border-border bg-card/50 shrink-0">
+    <div className="w-full h-full bg-card/50 flex flex-col shrink-0 min-w-0 min-h-0">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-foreground">Slide Manager</span>
+          <span className="text-xs font-semibold text-foreground">
+            Slide Manager
+          </span>
         </div>
         {showHint && (
           <div className="flex items-center gap-1.5 bg-muted/50 rounded-full px-2.5 py-0.5">
@@ -154,14 +172,14 @@ export function SlideManager() {
             items={cards.map((c) => c.id)}
             strategy={horizontalListSortingStrategy}
           >
-            <div className="flex gap-3 overflow-x-auto py-1">
+            <div className="flex gap-3 overflow-x-auto py-1 min-w-0">
               {cards.map((c, i) => (
                 <SortableThumbnail
                   key={c.id}
                   card={c}
                   index={i}
                   isActive={activeCardId === c.id}
-                  onClick={() => setActiveCardId(c.id)}
+                  onClick={() => selectSlide(c.id)}
                   aspectRatio={aspectRatio}
                   accentColor={themeSettings.primaryColor}
                 />

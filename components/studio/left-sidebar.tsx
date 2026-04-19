@@ -137,13 +137,6 @@ export function LeftSidebar() {
     assistantEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [assistantHistory, isAssistantThinking]);
 
-  // Auto-switch to assistant tab after generation completes
-  useEffect(() => {
-    if (cards.length > 0 && !isGenerating && chatHistory.length > 0) {
-      setActiveTab("assistant");
-    }
-  }, [cards.length, isGenerating]);
-
   // ─── Generation flow ───
   const handleGenerate = async () => {
     const text = inputValue.trim();
@@ -193,6 +186,7 @@ export function LeftSidebar() {
         role: "ai",
         text: `Done! Generated ${generatedCards.length} slides. Switch to the Assistant tab for improvement suggestions.`,
       });
+      setActiveTab("assistant");
       toast.success("Content generated successfully!");
 
       // Background image generation
@@ -345,7 +339,7 @@ export function LeftSidebar() {
   const hasCards = cards.length > 0;
 
   return (
-    <div className="w-72 border-r border-border bg-card flex flex-col h-full shrink-0 z-10">
+    <div className="w-full h-full bg-card flex flex-col shrink-0 z-10 text-foreground overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-border">
         <div className="flex items-center gap-2">
