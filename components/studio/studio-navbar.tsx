@@ -1,6 +1,7 @@
 "use client";
 
 import { useStudioStore } from "@/store/useStudioStore";
+import { getAccessibleTextColor } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -116,8 +117,8 @@ export function StudioNavbar() {
       {/* Left — Branding */}
       <div className="flex items-center gap-2.5">
         <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-md"
-          style={{ backgroundColor: accentColor }}
+          className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm shadow-md"
+          style={{ backgroundColor: accentColor, color: getAccessibleTextColor(accentColor) }}
         >
           AI
         </div>
@@ -159,8 +160,8 @@ export function StudioNavbar() {
         {/* Export dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger
-            className="inline-flex items-center justify-center text-white h-8 px-3 text-xs gap-1.5 shadow-sm rounded-md font-medium transition-colors hover:opacity-90"
-            style={{ backgroundColor: accentColor }}
+            className="inline-flex items-center justify-center h-8 px-3 text-xs gap-1.5 shadow-sm rounded-md font-medium transition-colors hover:opacity-90"
+            style={{ backgroundColor: accentColor, color: getAccessibleTextColor(accentColor) }}
           >
             <Download className="w-3.5 h-3.5" />
             Export

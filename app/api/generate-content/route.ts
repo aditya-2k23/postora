@@ -308,6 +308,7 @@ export async function POST(req: Request) {
               systemInstruction,
               responseMimeType: "application/json",
               responseSchema: cardSchema,
+              thinkingConfig: { thinkingBudget: 0 },
             },
           });
 

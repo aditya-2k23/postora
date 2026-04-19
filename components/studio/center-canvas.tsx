@@ -1,6 +1,7 @@
 "use client";
 
 import { useStudioStore, SocialCard } from "@/store/useStudioStore";
+import { getAccessibleTextColor } from "@/lib/utils";
 import {
   ChevronLeft,
   ChevronRight,
@@ -156,7 +157,10 @@ export function CenterCanvas() {
                       themeSettings.style === "bold"
                         ? themeSettings.primaryColor
                         : "#ffffff",
-                    color: themeSettings.style === "bold" ? "#ffffff" : "#111827",
+                    color:
+                      themeSettings.style === "bold"
+                        ? getAccessibleTextColor(themeSettings.primaryColor)
+                        : "#111827",
                   }}
                 >
                   {c.imageUrl && (
@@ -165,19 +169,45 @@ export function CenterCanvas() {
                       className={`absolute inset-0 w-full h-full object-cover ${themeSettings.style === "minimal" ? "opacity-20" : "opacity-40"}`}
                     />
                   )}
-                  <div className="absolute inset-0 flex flex-col justify-center p-20 z-10">
-                    <h2
-                      className="font-bold tracking-tight mb-8 text-center"
-                      style={{ fontSize: `${themeSettings.fontSize * 3}px` }}
-                    >
-                      {c.title}
-                    </h2>
-                    <p
-                      className="opacity-90 leading-relaxed text-left"
-                      style={{ fontSize: `${themeSettings.fontSize * 1.5}px` }}
-                    >
-                      {c.content}
-                    </p>
+                  <div
+                    className={`absolute inset-0 flex z-10 ${
+                      themeSettings.layoutEngine === "split" ? "flex-row items-center gap-12" : "flex-col gap-8"
+                    } ${
+                      themeSettings.layoutEngine === "inverted" ? "justify-end pb-32" : "justify-center"
+                    }`}
+                    style={{ padding: `${themeSettings.padding * 2.5}px` }}
+                  >
+                    {themeSettings.layoutEngine === "inverted" ? (
+                      <>
+                        <p
+                          className="opacity-90 leading-relaxed text-left"
+                          style={{ fontSize: `${themeSettings.fontSize * 1.5}px` }}
+                        >
+                          {c.content}
+                        </p>
+                        <h2
+                          className="font-bold tracking-tight text-center"
+                          style={{ fontSize: `${themeSettings.fontSize * 3}px` }}
+                        >
+                          {c.title}
+                        </h2>
+                      </>
+                    ) : (
+                      <>
+                        <h2
+                          className={`font-bold tracking-tight ${themeSettings.layoutEngine === "split" ? "flex-1" : ""} ${themeSettings.layoutEngine === "split" ? "text-left" : "text-center"}`}
+                          style={{ fontSize: `${themeSettings.fontSize * 3}px` }}
+                        >
+                          {c.title}
+                        </h2>
+                        <p
+                          className={`opacity-90 leading-relaxed ${themeSettings.layoutEngine === "split" ? "flex-1" : ""} text-left`}
+                          style={{ fontSize: `${themeSettings.fontSize * 1.5}px` }}
+                        >
+                          {c.content}
+                        </p>
+                      </>
+                    )}
                   </div>
                 </div>
               );
@@ -196,14 +226,18 @@ export function CenterCanvas() {
                 className="relative w-full max-w-md flex items-center justify-center"
               >
                 <div
-                  className="relative w-full bg-card shadow-2xl rounded-xl overflow-hidden border border-border"
+                  className="relative w-full bg-card shadow-2xl overflow-hidden border border-border"
                   style={{
                     aspectRatio: aspectRatio.replace(":", "/"),
+                    borderRadius: `${themeSettings.roundness}px`,
                     backgroundColor:
                       themeSettings.style === "bold"
                         ? themeSettings.primaryColor
                         : undefined,
-                    color: themeSettings.style === "bold" ? "#ffffff" : undefined,
+                    color:
+                      themeSettings.style === "bold"
+                        ? getAccessibleTextColor(themeSettings.primaryColor)
+                        : undefined,
                   }}
                 >
                   {/* Background Image */}
@@ -216,25 +250,57 @@ export function CenterCanvas() {
                   )}
 
                   {/* Foreground Content */}
-                  <div className="absolute inset-0 p-8 flex flex-col justify-center z-10 w-full h-full">
-                    <TextareaAutosize
-                      value={activeCard.title}
-                      onChange={(e) => {
-                        pushUndo();
-                        updateCard(activeCard.id, { title: e.target.value });
-                      }}
-                      className="w-full text-center font-bold tracking-tight bg-transparent border-none resize-none focus:outline-none focus:ring-2 focus:ring-primary/50 rounded p-2 text-balance leading-tight"
-                      style={{ fontSize: `${themeSettings.fontSize * 1.5}px` }}
-                    />
-                    <TextareaAutosize
-                      value={activeCard.content}
-                      onChange={(e) => {
-                        pushUndo();
-                        updateCard(activeCard.id, { content: e.target.value });
-                      }}
-                      className="w-full text-left mt-4 bg-transparent border-none resize-none focus:outline-none focus:ring-2 focus:ring-primary/50 rounded p-2 opacity-90 leading-relaxed"
-                      style={{ fontSize: `${themeSettings.fontSize}px` }}
-                    />
+                  <div
+                    className={`absolute inset-0 flex z-10 w-full h-full ${
+                      themeSettings.layoutEngine === "split" ? "flex-row items-center gap-6" : "flex-col gap-4"
+                    } ${
+                      themeSettings.layoutEngine === "inverted" ? "justify-end pb-12" : "justify-center"
+                    }`}
+                    style={{ padding: `${themeSettings.padding}px` }}
+                  >
+                    {themeSettings.layoutEngine === "inverted" ? (
+                      <>
+                        <TextareaAutosize
+                          value={activeCard.content}
+                          onChange={(e) => {
+                            pushUndo();
+                            updateCard(activeCard.id, { content: e.target.value });
+                          }}
+                          className="w-full text-left bg-transparent border-none resize-none focus:outline-none focus:ring-2 focus:ring-primary/50 rounded p-2 opacity-90 leading-relaxed"
+                          style={{ fontSize: `${themeSettings.fontSize}px` }}
+                        />
+                        <TextareaAutosize
+                          value={activeCard.title}
+                          onChange={(e) => {
+                            pushUndo();
+                            updateCard(activeCard.id, { title: e.target.value });
+                          }}
+                          className="w-full font-bold tracking-tight bg-transparent border-none resize-none focus:outline-none focus:ring-2 focus:ring-primary/50 rounded p-2 text-balance leading-tight text-center"
+                          style={{ fontSize: `${themeSettings.fontSize * 1.5}px` }}
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <TextareaAutosize
+                          value={activeCard.title}
+                          onChange={(e) => {
+                            pushUndo();
+                            updateCard(activeCard.id, { title: e.target.value });
+                          }}
+                          className={`w-full font-bold tracking-tight bg-transparent border-none resize-none focus:outline-none focus:ring-2 focus:ring-primary/50 rounded p-2 text-balance leading-tight ${themeSettings.layoutEngine === "split" ? "flex-1 text-left" : "text-center"}`}
+                          style={{ fontSize: `${themeSettings.fontSize * 1.5}px` }}
+                        />
+                        <TextareaAutosize
+                          value={activeCard.content}
+                          onChange={(e) => {
+                            pushUndo();
+                            updateCard(activeCard.id, { content: e.target.value });
+                          }}
+                          className={`w-full text-left bg-transparent border-none resize-none focus:outline-none focus:ring-2 focus:ring-primary/50 rounded p-2 opacity-90 leading-relaxed ${themeSettings.layoutEngine === "split" ? "flex-1" : ""}`}
+                          style={{ fontSize: `${themeSettings.fontSize}px` }}
+                        />
+                      </>
+                    )}
                   </div>
                 </div>
               </motion.div>

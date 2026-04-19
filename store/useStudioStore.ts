@@ -13,10 +13,19 @@ export type ThemeSettings = {
   primaryColor: string;
   fontSize: number;
   style: string;
+  layoutEngine: string;
+  padding: number;
+  roundness: number;
 };
 
 export type ChatMessage = {
   role: "user" | "ai";
+  text: string;
+};
+
+/** Assistant-specific message (separate from generation chat) */
+export type AssistantMessage = {
+  role: "user" | "assistant";
   text: string;
 };
 
@@ -32,8 +41,12 @@ interface StudioState {
   isGenerating: boolean;
   projectId: string | null;
 
-  // Chat history
+  // Generation chat history (prompt → carousel)
   chatHistory: ChatMessage[];
+
+  // Assistant chat history (post-generation coaching)
+  assistantHistory: AssistantMessage[];
+  isAssistantThinking: boolean;
 
   // Undo/Redo
   undoStack: SocialCard[][];
@@ -52,6 +65,9 @@ interface StudioState {
   setIsGenerating: (isGenerating: boolean) => void;
   setProjectId: (id: string | null) => void;
   addChatMessage: (message: ChatMessage) => void;
+  addAssistantMessage: (message: AssistantMessage) => void;
+  setIsAssistantThinking: (v: boolean) => void;
+  clearAssistantHistory: () => void;
   pushUndo: () => void;
   undo: () => void;
   redo: () => void;
@@ -62,6 +78,9 @@ const defaultTheme: ThemeSettings = {
   primaryColor: "#2563EB",
   fontSize: 16,
   style: "minimal",
+  layoutEngine: "standard",
+  padding: 40,
+  roundness: 16,
 };
 
 export const useStudioStore = create<StudioState>()(
@@ -78,6 +97,8 @@ export const useStudioStore = create<StudioState>()(
       isGenerating: false,
       projectId: null,
       chatHistory: [],
+      assistantHistory: [],
+      isAssistantThinking: false,
       undoStack: [],
       redoStack: [],
 
@@ -115,6 +136,16 @@ export const useStudioStore = create<StudioState>()(
         set((state) => ({
           chatHistory: [...state.chatHistory, message],
         })),
+
+      addAssistantMessage: (message) =>
+        set((state) => ({
+          assistantHistory: [...state.assistantHistory, message],
+        })),
+
+      setIsAssistantThinking: (isAssistantThinking) =>
+        set({ isAssistantThinking }),
+
+      clearAssistantHistory: () => set({ assistantHistory: [] }),
 
       pushUndo: () =>
         set((state) => ({
@@ -155,6 +186,8 @@ export const useStudioStore = create<StudioState>()(
           activeCardId: null,
           projectId: null,
           chatHistory: [],
+          assistantHistory: [],
+          isAssistantThinking: false,
           undoStack: [],
           redoStack: [],
         }),
@@ -170,6 +203,7 @@ export const useStudioStore = create<StudioState>()(
         cards: state.cards,
         themeSettings: state.themeSettings,
         chatHistory: state.chatHistory,
+        // Don't persist assistant history — it's session-based
       }),
     },
   ),
