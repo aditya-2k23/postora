@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type Konva from "konva";
-import { Layer, Line, Rect, Stage } from "react-konva";
+import { Layer, Line, Rect, Stage } from "react-konva/lib/ReactKonvaCore";
+import "@/lib/konva-shapes";
 import type { CanvasSize, CanvasTool, SlideElement } from "@/types/canvas";
 import { SlideRenderer } from "@/components/editor/SlideRenderer";
 import { KonvaTransformer } from "@/components/editor/KonvaTransformer";
@@ -159,18 +160,18 @@ export function CanvasStage({
   const handleMouseDown = (evt: Konva.KonvaEventObject<MouseEvent>) => {
     const stage = evt.target.getStage();
     if (!stage) return;
-
-    const clickedOnEmpty =
-      evt.target === stage || evt.target.getParent() === stage;
     const point = toCanvasPoint(stage);
     if (!point) return;
-
-    if (!clickedOnEmpty) return;
 
     if (activeTool !== "select") {
       createElementAtPoint(point.x, point.y);
       return;
     }
+
+    const clickedOnEmpty =
+      evt.target === stage || evt.target.getParent() === stage;
+
+    if (!clickedOnEmpty) return;
 
     onClearSelection();
     setSelectionRect({
@@ -320,6 +321,7 @@ export function CanvasStage({
               key={element.id}
               element={element}
               selected={selectedIds.includes(element.id)}
+              isSelectMode={activeTool === "select"}
               onSelect={onSelect}
               onChange={onChangeElement}
               onDragMove={handleDragMove}
@@ -359,7 +361,7 @@ export function CanvasStage({
 
           <KonvaTransformer
             stageRef={stageRef}
-            selectedIds={selectedIds}
+            selectedIds={activeTool === "select" ? selectedIds : []}
             elements={elements}
             onTransformEnd={onChangeElement}
           />

@@ -17,6 +17,7 @@ export function CanvasEditor() {
     currentSlideId,
     selectedElementIds,
     activeTool,
+    clipboard,
     historyPast,
     historyFuture,
     gridEnabled,
@@ -71,6 +72,12 @@ export function CanvasEditor() {
       setCurrentSlideId(activeCardId);
     }
   }, [activeCardId, currentSlideId, setCurrentSlideId]);
+
+  useEffect(() => {
+    if (activeTool !== "select" && selectedElementIds.length > 0) {
+      clearSelection();
+    }
+  }, [activeTool, selectedElementIds.length, clearSelection]);
 
   useEffect(() => {
     if (!slideId || !stage) return;
@@ -150,6 +157,8 @@ export function CanvasEditor() {
           activeTool={activeTool}
           canUndo={historyPast.length > 0}
           canRedo={historyFuture.length > 0}
+          hasSelection={selectedElementIds.length > 0}
+          canPaste={Boolean(clipboard && clipboard.length > 0)}
           onToolChange={setActiveTool}
           onUndo={undo}
           onRedo={redo}

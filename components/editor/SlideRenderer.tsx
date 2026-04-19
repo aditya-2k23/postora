@@ -1,13 +1,22 @@
 "use client";
 
 import { memo } from "react";
-import { Circle, Group, Image as KonvaImage, Line, Rect, Text } from "react-konva";
+import {
+  Circle,
+  Group,
+  Image as KonvaImage,
+  Line,
+  Rect,
+  Text,
+} from "react-konva/lib/ReactKonvaCore";
+import "@/lib/konva-shapes";
 import useImage from "use-image";
 import type { SlideElement } from "@/types/canvas";
 
 type Props = {
   element: SlideElement;
   selected: boolean;
+  isSelectMode: boolean;
   onSelect: (id: string, additive: boolean) => void;
   onChange: (id: string, updates: Partial<SlideElement>) => void;
   onDragMove?: (id: string, x: number, y: number) => void;
@@ -17,6 +26,7 @@ type Props = {
 
 const ImageNode = memo(function ImageNode({
   element,
+  isSelectMode,
   selected,
   onSelect,
   onChange,
@@ -31,11 +41,19 @@ const ImageNode = memo(function ImageNode({
       y={element.y}
       rotation={element.rotation ?? 0}
       opacity={element.opacity ?? 1}
-      draggable={!element.locked}
+      draggable={isSelectMode && !element.locked}
       visible={!element.hidden}
-      onClick={(evt) => onSelect(element.id, evt.evt.shiftKey)}
-      onTap={(evt) => onSelect(element.id, evt.evt.shiftKey)}
-      onDragMove={(evt) => onDragMove?.(element.id, evt.target.x(), evt.target.y())}
+      onClick={(evt) => {
+        if (!isSelectMode) return;
+        onSelect(element.id, evt.evt.shiftKey);
+      }}
+      onTap={(evt) => {
+        if (!isSelectMode) return;
+        onSelect(element.id, evt.evt.shiftKey);
+      }}
+      onDragMove={(evt) =>
+        onDragMove?.(element.id, evt.target.x(), evt.target.y())
+      }
       onDragEnd={(evt) => {
         onChange(element.id, { x: evt.target.x(), y: evt.target.y() });
         onDragEnd?.(element.id, evt.target.x(), evt.target.y());
@@ -63,6 +81,7 @@ const ImageNode = memo(function ImageNode({
 
 const TextNode = memo(function TextNode({
   element,
+  isSelectMode,
   onSelect,
   onChange,
   onDragMove,
@@ -85,13 +104,27 @@ const TextNode = memo(function TextNode({
       letterSpacing={element.letterSpacing}
       rotation={element.rotation ?? 0}
       opacity={element.opacity ?? 1}
-      draggable={!element.locked}
+      draggable={isSelectMode && !element.locked}
       visible={!element.hidden}
-      onClick={(evt) => onSelect(element.id, evt.evt.shiftKey)}
-      onTap={(evt) => onSelect(element.id, evt.evt.shiftKey)}
-      onDblClick={() => onDoubleClickText?.(element.id)}
-      onDblTap={() => onDoubleClickText?.(element.id)}
-      onDragMove={(evt) => onDragMove?.(element.id, evt.target.x(), evt.target.y())}
+      onClick={(evt) => {
+        if (!isSelectMode) return;
+        onSelect(element.id, evt.evt.shiftKey);
+      }}
+      onTap={(evt) => {
+        if (!isSelectMode) return;
+        onSelect(element.id, evt.evt.shiftKey);
+      }}
+      onDblClick={() => {
+        if (!isSelectMode) return;
+        onDoubleClickText?.(element.id);
+      }}
+      onDblTap={() => {
+        if (!isSelectMode) return;
+        onDoubleClickText?.(element.id);
+      }}
+      onDragMove={(evt) =>
+        onDragMove?.(element.id, evt.target.x(), evt.target.y())
+      }
       onDragEnd={(evt) => {
         onChange(element.id, { x: evt.target.x(), y: evt.target.y() });
         onDragEnd?.(element.id, evt.target.x(), evt.target.y());
@@ -102,6 +135,7 @@ const TextNode = memo(function TextNode({
 
 const ShapeNode = memo(function ShapeNode({
   element,
+  isSelectMode,
   onSelect,
   onChange,
   onDragMove,
@@ -118,11 +152,19 @@ const ShapeNode = memo(function ShapeNode({
         strokeWidth={element.strokeWidth ?? 2}
         rotation={element.rotation ?? 0}
         opacity={element.opacity ?? 1}
-        draggable={!element.locked}
+        draggable={isSelectMode && !element.locked}
         visible={!element.hidden}
-        onClick={(evt) => onSelect(element.id, evt.evt.shiftKey)}
-        onTap={(evt) => onSelect(element.id, evt.evt.shiftKey)}
-        onDragMove={(evt) => onDragMove?.(element.id, evt.target.x(), evt.target.y())}
+        onClick={(evt) => {
+          if (!isSelectMode) return;
+          onSelect(element.id, evt.evt.shiftKey);
+        }}
+        onTap={(evt) => {
+          if (!isSelectMode) return;
+          onSelect(element.id, evt.evt.shiftKey);
+        }}
+        onDragMove={(evt) =>
+          onDragMove?.(element.id, evt.target.x(), evt.target.y())
+        }
         onDragEnd={(evt) => {
           onChange(element.id, { x: evt.target.x(), y: evt.target.y() });
           onDragEnd?.(element.id, evt.target.x(), evt.target.y());
@@ -143,12 +185,22 @@ const ShapeNode = memo(function ShapeNode({
         strokeWidth={element.strokeWidth ?? 0}
         rotation={element.rotation ?? 0}
         opacity={element.opacity ?? 1}
-        draggable={!element.locked}
+        draggable={isSelectMode && !element.locked}
         visible={!element.hidden}
-        onClick={(evt) => onSelect(element.id, evt.evt.shiftKey)}
-        onTap={(evt) => onSelect(element.id, evt.evt.shiftKey)}
+        onClick={(evt) => {
+          if (!isSelectMode) return;
+          onSelect(element.id, evt.evt.shiftKey);
+        }}
+        onTap={(evt) => {
+          if (!isSelectMode) return;
+          onSelect(element.id, evt.evt.shiftKey);
+        }}
         onDragMove={(evt) =>
-          onDragMove?.(element.id, evt.target.x() - (element.radius ?? 40), evt.target.y() - (element.radius ?? 40))
+          onDragMove?.(
+            element.id,
+            evt.target.x() - (element.radius ?? 40),
+            evt.target.y() - (element.radius ?? 40),
+          )
         }
         onDragEnd={(evt) => {
           const x = evt.target.x() - (element.radius ?? 40);
@@ -173,11 +225,19 @@ const ShapeNode = memo(function ShapeNode({
       cornerRadius={12}
       rotation={element.rotation ?? 0}
       opacity={element.opacity ?? 1}
-      draggable={!element.locked}
+      draggable={isSelectMode && !element.locked}
       visible={!element.hidden}
-      onClick={(evt) => onSelect(element.id, evt.evt.shiftKey)}
-      onTap={(evt) => onSelect(element.id, evt.evt.shiftKey)}
-      onDragMove={(evt) => onDragMove?.(element.id, evt.target.x(), evt.target.y())}
+      onClick={(evt) => {
+        if (!isSelectMode) return;
+        onSelect(element.id, evt.evt.shiftKey);
+      }}
+      onTap={(evt) => {
+        if (!isSelectMode) return;
+        onSelect(element.id, evt.evt.shiftKey);
+      }}
+      onDragMove={(evt) =>
+        onDragMove?.(element.id, evt.target.x(), evt.target.y())
+      }
       onDragEnd={(evt) => {
         onChange(element.id, { x: evt.target.x(), y: evt.target.y() });
         onDragEnd?.(element.id, evt.target.x(), evt.target.y());
@@ -188,7 +248,8 @@ const ShapeNode = memo(function ShapeNode({
 
 export const SlideRenderer = memo(function SlideRenderer(props: Props) {
   const { element } = props;
-  if (element.type === "image") return <ImageNode {...props} element={element} />;
+  if (element.type === "image")
+    return <ImageNode {...props} element={element} />;
   if (element.type === "text") return <TextNode {...props} element={element} />;
   return <ShapeNode {...props} element={element} />;
 });

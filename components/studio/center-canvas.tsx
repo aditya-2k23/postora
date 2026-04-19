@@ -1,20 +1,19 @@
 "use client";
+import dynamic from "next/dynamic";
 import { useStudioStore } from "@/store/useStudioStore";
 import { useCanvasStore } from "@/store/useCanvasStore";
-import {
-  ChevronLeft,
-  ChevronRight,
-  LayoutTemplate,
-  Undo2,
-  Redo2,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, LayoutTemplate } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CanvasEditor } from "@/components/editor/CanvasEditor";
+
+const CanvasEditor = dynamic(
+  () =>
+    import("@/components/editor/CanvasEditor").then((mod) => mod.CanvasEditor),
+  { ssr: false },
+);
 
 export function CenterCanvas() {
   const { cards, activeCardId, setActiveCardId } = useStudioStore();
   const setCurrentSlideId = useCanvasStore((s) => s.setCurrentSlideId);
-  const { historyPast, historyFuture, undo, redo } = useCanvasStore();
 
   const activeIndex = cards.findIndex((c) => c.id === activeCardId);
   const activeSlideIndex = activeIndex >= 0 ? activeIndex : 0;
@@ -43,30 +42,7 @@ export function CenterCanvas() {
   return (
     <div className="w-full h-full flex overflow-hidden relative">
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
-        <div className="h-10 border-b border-border flex items-center justify-between px-4 bg-card/30 shrink-0">
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
-              onClick={undo}
-              disabled={historyPast.length === 0}
-            >
-              <Undo2 className="w-3.5 h-3.5" />
-              Undo
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-              onClick={redo}
-              disabled={historyFuture.length === 0}
-            >
-              <Redo2 className="w-3.5 h-3.5" />
-              Redo
-            </Button>
-          </div>
-
+        <div className="h-10 border-b border-border flex items-center justify-end px-4 bg-card/30 shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-muted-foreground">
               Slide {activeSlideIndex + 1} of {cards.length}
@@ -80,6 +56,8 @@ export function CenterCanvas() {
                   selectSlide(cards[Math.max(0, activeSlideIndex - 1)].id)
                 }
                 disabled={activeSlideIndex === 0}
+                title="Previous slide"
+                aria-label="Previous slide"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
               </Button>
@@ -93,6 +71,8 @@ export function CenterCanvas() {
                   )
                 }
                 disabled={activeSlideIndex === cards.length - 1}
+                title="Next slide"
+                aria-label="Next slide"
               >
                 <ChevronRight className="w-3.5 h-3.5" />
               </Button>

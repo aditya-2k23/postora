@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, type RefObject } from "react";
-import { Transformer } from "react-konva";
+import { Transformer } from "react-konva/lib/ReactKonvaCore";
+import "@/lib/konva-shapes";
 import type Konva from "konva";
 import type { SlideElement } from "@/types/canvas";
 
@@ -84,7 +85,10 @@ export function KonvaTransformer({
             onTransformEnd(element.id, {
               x: node.x() - (element.radius ?? 40) * scaleX,
               y: node.y() - (element.radius ?? 40) * scaleY,
-              radius: Math.max(8, (element.radius ?? 40) * Math.max(scaleX, scaleY)),
+              radius: Math.max(
+                8,
+                (element.radius ?? 40) * Math.max(scaleX, scaleY),
+              ),
               rotation: node.rotation(),
             });
             return;

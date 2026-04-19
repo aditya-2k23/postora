@@ -16,7 +16,6 @@ import { useAuth } from "@/components/auth-provider";
 import { db } from "@/lib/firebase";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { toast } from "sonner";
-import { exportToPNG, exportToPDF } from "@/lib/export";
 import { useTheme } from "next-themes";
 import { useCanvasStore } from "@/store/useCanvasStore";
 
@@ -108,6 +107,7 @@ export function StudioNavbar() {
       toast.error("Generate some content first.");
       return;
     }
+    const { exportToPNG } = await import("@/lib/export");
     toast.promise(exportToPNG(), {
       loading: "Preparing PNGs...",
       success: "Exported successfully!",
@@ -120,6 +120,7 @@ export function StudioNavbar() {
       toast.error("Generate some content first.");
       return;
     }
+    const { exportToPDF } = await import("@/lib/export");
     toast.promise(exportToPDF(), {
       loading: "Preparing PDF document...",
       success: "Exported successfully!",
