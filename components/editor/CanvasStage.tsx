@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type Konva from "konva";
 import { Layer, Line, Rect, Stage } from "react-konva/lib/ReactKonvaCore";
 import "@/lib/konva-shapes";
@@ -12,6 +12,7 @@ type Props = {
   canvasSize: CanvasSize;
   elements: SlideElement[];
   selectedIds: string[];
+  editingElementId: string | null;
   activeTool: CanvasTool;
   backgroundColor: string;
   gridEnabled: boolean;
@@ -23,6 +24,7 @@ type Props = {
   onAddElement: (element: SlideElement) => void;
   onChangeElement: (id: string, updates: Partial<SlideElement>) => void;
   onPushHistory: () => void;
+  onCreateText: (id: string, value: string) => void;
   onDoubleClickText: (id: string) => void;
 };
 
@@ -31,13 +33,36 @@ type GuideState = {
   y: number | null;
 };
 
+type TextDraftState = {
+  startX: number;
+  startY: number;
+  currentX: number;
+  currentY: number;
+};
+
 const uid = () => crypto.randomUUID();
 const SNAP_THRESHOLD = 6;
+const MIN_TEXT_BOX_WIDTH = 120;
+const MIN_TEXT_BOX_HEIGHT = 48;
+const CLICK_TO_ADD_TEXT_WIDTH = 360;
+
+const normalizeRect = (
+  startX: number,
+  startY: number,
+  endX: number,
+  endY: number,
+) => ({
+  x: Math.min(startX, endX),
+  y: Math.min(startY, endY),
+  width: Math.abs(endX - startX),
+  height: Math.abs(endY - startY),
+});
 
 export function CanvasStage({
   canvasSize,
   elements,
   selectedIds,
+  editingElementId,
   activeTool,
   backgroundColor,
   gridEnabled,
@@ -49,6 +74,7 @@ export function CanvasStage({
   onAddElement,
   onChangeElement,
   onPushHistory,
+  onCreateText,
   onDoubleClickText,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -62,6 +88,7 @@ export function CanvasStage({
     height: number;
     visible: boolean;
   }>({ x: 0, y: 0, width: 0, height: 0, visible: false });
+  const [textDraft, setTextDraft] = useState<TextDraftState | null>(null);
 
   const fit = useMemo(() => {
     const scale = Math.min(
@@ -98,6 +125,16 @@ export function CanvasStage({
     return () => onStageReady(null);
   }, [onStageReady]);
 
+  const textDraftRect = useMemo(() => {
+    if (!textDraft || activeTool !== "text") return null;
+    return normalizeRect(
+      textDraft.startX,
+      textDraft.startY,
+      textDraft.currentX,
+      textDraft.currentY,
+    );
+  }, [activeTool, textDraft]);
+
   const toCanvasPoint = (stage: Konva.Stage) => {
     const pointer = stage.getPointerPosition();
     if (!pointer) return null;
@@ -107,26 +144,28 @@ export function CanvasStage({
     };
   };
 
+  const createTextElement = (x: number, y: number, width: number) => {
+    const element: Extract<SlideElement, { type: "text" }> = {
+      id: uid(),
+      type: "text",
+      text: "Edit text",
+      x,
+      y,
+      width,
+      fontSize: 54,
+      fontFamily: "Inter",
+      fontWeight: "600",
+      fill: "#111827",
+      align: "left",
+      lineHeight: 1.25,
+      letterSpacing: 0.2,
+    };
+    onPushHistory();
+    onAddElement(element);
+    onCreateText(element.id, element.text);
+  };
+
   const createElementAtPoint = (x: number, y: number) => {
-    if (activeTool === "text") {
-      onPushHistory();
-      onAddElement({
-        id: uid(),
-        type: "text",
-        text: "Edit text",
-        x,
-        y,
-        width: 360,
-        fontSize: 54,
-        fontFamily: "Inter",
-        fontWeight: "600",
-        fill: "#111827",
-        align: "left",
-        lineHeight: 1.25,
-        letterSpacing: 0.2,
-      });
-      return;
-    }
     if (activeTool === "shape") {
       onPushHistory();
       onAddElement({
@@ -158,10 +197,25 @@ export function CanvasStage({
   };
 
   const handleMouseDown = (evt: Konva.KonvaEventObject<MouseEvent>) => {
+    if (typeof evt.evt.button === "number" && evt.evt.button !== 0) {
+      evt.evt.preventDefault();
+      return;
+    }
+
     const stage = evt.target.getStage();
     if (!stage) return;
     const point = toCanvasPoint(stage);
     if (!point) return;
+
+    if (activeTool === "text") {
+      setTextDraft({
+        startX: point.x,
+        startY: point.y,
+        currentX: point.x,
+        currentY: point.y,
+      });
+      return;
+    }
 
     if (activeTool !== "select") {
       createElementAtPoint(point.x, point.y);
@@ -184,6 +238,21 @@ export function CanvasStage({
   };
 
   const handleMouseMove = () => {
+    if (textDraft && stageRef.current) {
+      const point = toCanvasPoint(stageRef.current);
+      if (!point) return;
+      setTextDraft((prev) =>
+        prev
+          ? {
+              ...prev,
+              currentX: point.x,
+              currentY: point.y,
+            }
+          : prev,
+      );
+      return;
+    }
+
     if (!selectionRect.visible || !stageRef.current) return;
     const point = toCanvasPoint(stageRef.current);
     if (!point) return;
@@ -195,6 +264,31 @@ export function CanvasStage({
   };
 
   const handleMouseUp = () => {
+    if (textDraft) {
+      if (activeTool !== "text") {
+        setTextDraft(null);
+        return;
+      }
+
+      const draft = normalizeRect(
+        textDraft.startX,
+        textDraft.startY,
+        textDraft.currentX,
+        textDraft.currentY,
+      );
+      const clickThreshold = 6;
+      const didClick =
+        draft.width < clickThreshold && draft.height < clickThreshold;
+      const x = didClick ? textDraft.startX : draft.x;
+      const y = didClick ? textDraft.startY : draft.y;
+      const width = didClick
+        ? CLICK_TO_ADD_TEXT_WIDTH
+        : Math.max(MIN_TEXT_BOX_WIDTH, draft.width);
+      createTextElement(x, y, width);
+      setTextDraft(null);
+      return;
+    }
+
     if (!selectionRect.visible) return;
     const box = {
       x: Math.min(selectionRect.x, selectionRect.x + selectionRect.width),
@@ -231,47 +325,62 @@ export function CanvasStage({
     }));
   };
 
-  const handleDragMove = (id: string, x: number, y: number) => {
-    const width = canvasSize.width;
-    const height = canvasSize.height;
-    let nextX = x;
-    let nextY = y;
-    let guideX: number | null = null;
-    let guideY: number | null = null;
+  const handleDragMove = useCallback(
+    (id: string, x: number, y: number) => {
+      const width = canvasSize.width;
+      const height = canvasSize.height;
+      let nextX = x;
+      let nextY = y;
+      let guideX: number | null = null;
+      let guideY: number | null = null;
 
-    if (Math.abs(x) < SNAP_THRESHOLD) {
-      nextX = 0;
-      guideX = 0;
-    } else if (Math.abs(x + 0 - width / 2) < SNAP_THRESHOLD) {
-      nextX = width / 2;
-      guideX = width / 2;
-    } else if (Math.abs(x - width) < SNAP_THRESHOLD) {
-      nextX = width;
-      guideX = width;
-    }
+      if (Math.abs(x) < SNAP_THRESHOLD) {
+        nextX = 0;
+        guideX = 0;
+      } else if (Math.abs(x + 0 - width / 2) < SNAP_THRESHOLD) {
+        nextX = width / 2;
+        guideX = width / 2;
+      } else if (Math.abs(x - width) < SNAP_THRESHOLD) {
+        nextX = width;
+        guideX = width;
+      }
 
-    if (Math.abs(y) < SNAP_THRESHOLD) {
-      nextY = 0;
-      guideY = 0;
-    } else if (Math.abs(y + 0 - height / 2) < SNAP_THRESHOLD) {
-      nextY = height / 2;
-      guideY = height / 2;
-    } else if (Math.abs(y - height) < SNAP_THRESHOLD) {
-      nextY = height;
-      guideY = height;
-    }
+      if (Math.abs(y) < SNAP_THRESHOLD) {
+        nextY = 0;
+        guideY = 0;
+      } else if (Math.abs(y + 0 - height / 2) < SNAP_THRESHOLD) {
+        nextY = height / 2;
+        guideY = height / 2;
+      } else if (Math.abs(y - height) < SNAP_THRESHOLD) {
+        nextY = height;
+        guideY = height;
+      }
 
-    if (stageRef.current) {
-      const node = stageRef.current.findOne(`#${id}`);
-      if (node) node.position({ x: nextX, y: nextY });
-    }
-    setGuides({ x: guideX, y: guideY });
-  };
+      if (stageRef.current) {
+        const node = stageRef.current.findOne(`#${id}`);
+        if (node) node.position({ x: nextX, y: nextY });
+      }
+      setGuides({ x: guideX, y: guideY });
+    },
+    [canvasSize.width, canvasSize.height],
+  );
 
   return (
     <div
       ref={wrapRef}
-      className="relative w-full h-full bg-muted/20 overflow-hidden"
+      className="relative w-full h-full bg-muted/20 overflow-hidden select-none"
+      style={{ cursor: activeTool === "text" ? "crosshair" : "default" }}
+      onContextMenu={(evt) => {
+        evt.preventDefault();
+      }}
+      onDoubleClick={(evt) => {
+        evt.preventDefault();
+      }}
+      onMouseDownCapture={(evt) => {
+        if (evt.button !== 0 || evt.detail > 1) {
+          evt.preventDefault();
+        }
+      }}
     >
       <Stage
         ref={stageRef}
@@ -283,6 +392,12 @@ export function CanvasStage({
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
+        onContextMenu={(evt) => {
+          evt.evt.preventDefault();
+        }}
+        onDblClick={(evt) => {
+          evt.evt.preventDefault();
+        }}
       >
         <Layer>
           <Rect
@@ -322,10 +437,11 @@ export function CanvasStage({
               element={element}
               selected={selectedIds.includes(element.id)}
               isSelectMode={activeTool === "select"}
+              editingElementId={editingElementId}
               onSelect={onSelect}
               onChange={onChangeElement}
               onDragMove={handleDragMove}
-              onDragEnd={() => setGuides({ x: null, y: null })}
+              onDragEnd={useCallback(() => setGuides({ x: null, y: null }), [])}
               onDoubleClickText={onDoubleClickText}
             />
           ))}
@@ -339,6 +455,19 @@ export function CanvasStage({
               stroke="#3B82F6"
               strokeWidth={1}
               fill="rgba(59,130,246,0.18)"
+            />
+          ) : null}
+
+          {textDraftRect ? (
+            <Rect
+              x={textDraftRect.x}
+              y={textDraftRect.y}
+              width={Math.max(textDraftRect.width, MIN_TEXT_BOX_WIDTH)}
+              height={Math.max(textDraftRect.height, MIN_TEXT_BOX_HEIGHT)}
+              stroke="#14B8A6"
+              strokeWidth={1}
+              dash={[8, 6]}
+              fill="rgba(20,184,166,0.12)"
             />
           ) : null}
 

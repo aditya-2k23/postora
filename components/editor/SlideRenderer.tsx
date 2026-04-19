@@ -17,6 +17,7 @@ type Props = {
   element: SlideElement;
   selected: boolean;
   isSelectMode: boolean;
+  editingElementId?: string | null;
   onSelect: (id: string, additive: boolean) => void;
   onChange: (id: string, updates: Partial<SlideElement>) => void;
   onDragMove?: (id: string, x: number, y: number) => void;
@@ -82,12 +83,15 @@ const ImageNode = memo(function ImageNode({
 const TextNode = memo(function TextNode({
   element,
   isSelectMode,
+  editingElementId,
   onSelect,
   onChange,
   onDragMove,
   onDragEnd,
   onDoubleClickText,
 }: Props & { element: Extract<SlideElement, { type: "text" }> }) {
+  const isEditing = editingElementId === element.id;
+
   return (
     <Text
       id={element.id}
@@ -103,22 +107,27 @@ const TextNode = memo(function TextNode({
       lineHeight={element.lineHeight}
       letterSpacing={element.letterSpacing}
       rotation={element.rotation ?? 0}
-      opacity={element.opacity ?? 1}
-      draggable={isSelectMode && !element.locked}
+      opacity={isEditing ? 0 : (element.opacity ?? 1)}
+      draggable={isSelectMode && !element.locked && !isEditing}
       visible={!element.hidden}
+      listening={!isEditing}
       onClick={(evt) => {
+        if (isEditing) return;
         if (!isSelectMode) return;
         onSelect(element.id, evt.evt.shiftKey);
       }}
       onTap={(evt) => {
+        if (isEditing) return;
         if (!isSelectMode) return;
         onSelect(element.id, evt.evt.shiftKey);
       }}
       onDblClick={() => {
+        if (isEditing) return;
         if (!isSelectMode) return;
         onDoubleClickText?.(element.id);
       }}
       onDblTap={() => {
+        if (isEditing) return;
         if (!isSelectMode) return;
         onDoubleClickText?.(element.id);
       }}

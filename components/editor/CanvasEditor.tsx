@@ -189,6 +189,7 @@ export function CanvasEditor() {
           canvasSize={canvasSize}
           elements={slide.elements}
           selectedIds={selectedElementIds}
+          editingElementId={textEditing?.elementId ?? null}
           activeTool={activeTool}
           backgroundColor={slide.backgroundColor}
           gridEnabled={gridEnabled}
@@ -200,6 +201,10 @@ export function CanvasEditor() {
           onAddElement={addElement}
           onChangeElement={updateElement}
           onPushHistory={pushHistory}
+          onCreateText={(id, value) => {
+            setActiveTool("select");
+            startTextEditing(id, value);
+          }}
           onDoubleClickText={(id) => {
             const node = slide.elements.find(
               (el) => el.id === id && el.type === "text",
@@ -211,11 +216,19 @@ export function CanvasEditor() {
         />
 
         <TextEditorOverlay
+          key={textEditing?.elementId ?? "none"}
           stage={stage}
           editingElementId={textEditing?.elementId ?? null}
           elements={slide.elements}
           onCommit={(value) => {
             if (!textEditing?.elementId) return;
+            const currentText = slide.elements.find(
+              (el) => el.type === "text" && el.id === textEditing.elementId,
+            );
+            if (currentText?.type === "text" && currentText.text === value) {
+              stopTextEditing();
+              return;
+            }
             pushHistory();
             updateElement(textEditing.elementId, { text: value });
             stopTextEditing();

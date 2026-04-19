@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type Konva from "konva";
 import type { SlideElement } from "@/types/canvas";
 
@@ -20,6 +20,7 @@ export function TextEditorOverlay({
   onCancel,
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const didFinalizeRef = useRef(false);
 
   const target = useMemo(
     () =>
@@ -30,28 +31,52 @@ export function TextEditorOverlay({
     [editingElementId, elements],
   );
 
+  const [draftValue, setDraftValue] = useState(() => target?.text ?? "");
+
+  useEffect(() => {
+    didFinalizeRef.current = false;
+  }, [editingElementId]);
+
   const style = useMemo(() => {
     if (!stage || !target) return null;
     const node = stage.findOne<Konva.Text>(`#${target.id}`);
     if (!node) return null;
+
     const stageBox = stage.container().getBoundingClientRect();
-    const abs = node.getAbsolutePosition();
-    const scale = stage.scaleX() || 1;
+    const topLeft = node.getAbsoluteTransform().point({ x: 0, y: 0 });
+    const absScale = node.getAbsoluteScale();
+    const absRotation = node.getAbsoluteRotation();
+
+    const scaleX = Math.max(absScale.x || 1, 0.0001);
+    const scaleY = Math.max(absScale.y || 1, 0.0001);
+    const computedHeight = Math.max(
+      target.fontSize * (target.lineHeight ?? 1.3),
+      node.height(),
+    );
 
     return {
-      left: stageBox.left + abs.x * scale,
-      top: stageBox.top + abs.y * scale,
-      width: target.width * scale,
-      minHeight: Math.max(target.fontSize * 1.5, node.height()) * scale,
-      fontSize: target.fontSize * scale,
+      left: stageBox.left + topLeft.x,
+      top: stageBox.top + topLeft.y,
+      width: node.width() * scaleX,
+      minHeight: computedHeight * scaleY,
+      fontSize: target.fontSize * scaleY,
       lineHeight: target.lineHeight ?? 1.3,
-      letterSpacing: target.letterSpacing ?? 0,
+      letterSpacing: (target.letterSpacing ?? 0) * scaleX,
       color: target.fill,
       fontFamily: target.fontFamily,
       fontWeight: target.fontWeight ?? "400",
       textAlign: target.align ?? "left",
-      transform: `rotate(${target.rotation ?? 0}deg)`,
+      transform: `rotate(${absRotation}deg)`,
       transformOrigin: "top left",
+      padding: 0,
+      margin: 0,
+      background: "transparent",
+      border: "none",
+      boxShadow: "none",
+      borderRadius: 0,
+      overflow: "hidden",
+      whiteSpace: "pre-wrap",
+      caretColor: target.fill,
     } as const;
   }, [stage, target]);
 
@@ -61,25 +86,40 @@ export function TextEditorOverlay({
     textareaRef.current.select();
   }, [editingElementId]);
 
+  const finalizeCommit = () => {
+    if (didFinalizeRef.current) return;
+    didFinalizeRef.current = true;
+    onCommit(draftValue);
+  };
+
+  const finalizeCancel = () => {
+    didFinalizeRef.current = true;
+    onCancel();
+  };
+
   if (!target || !style) return null;
 
   return (
     <textarea
       ref={textareaRef}
-      defaultValue={target.text}
-      onBlur={(evt) => onCommit(evt.target.value)}
+      value={draftValue}
+      spellCheck={false}
+      onChange={(evt) => {
+        setDraftValue(evt.target.value);
+      }}
+      onBlur={finalizeCommit}
       onKeyDown={(evt) => {
         if (evt.key === "Escape") {
           evt.preventDefault();
-          onCancel();
+          finalizeCancel();
           return;
         }
         if (evt.key === "Enter" && !evt.shiftKey) {
           evt.preventDefault();
-          onCommit((evt.target as HTMLTextAreaElement).value);
+          finalizeCommit();
         }
       }}
-      className="fixed z-[120] border border-primary/40 bg-card/95 rounded-md p-1.5 outline-none shadow-lg resize-none"
+      className="fixed z-[120] outline-none resize-none transition-opacity duration-100"
       style={style}
     />
   );
