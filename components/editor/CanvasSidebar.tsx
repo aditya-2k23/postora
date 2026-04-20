@@ -4,13 +4,18 @@ import { Plus, Replace, WandSparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { SlideElement } from "@/types/canvas";
 import { LayerPanel } from "@/components/editor/LayerPanel";
+import { cn } from "@/lib/utils";
 
 type Props = {
   slideElements: SlideElement[];
   selectedIds: string[];
   backgroundColor: string;
   onBackgroundColor: (color: string) => void;
-  onUpdateElement: (id: string, updates: Partial<SlideElement>) => void;
+  onUpdateElement: (
+    id: string,
+    updates: Partial<SlideElement>,
+    applyScope?: "single" | "matching-selection",
+  ) => void;
   onAlign: (dir: "left" | "right" | "top" | "bottom" | "center") => void;
   onDistribute: (axis: "horizontal" | "vertical") => void;
   onSelectLayer: (id: string) => void;
@@ -23,6 +28,13 @@ type Props = {
 };
 
 const FONT_OPTIONS = ["Inter", "Poppins", "Playfair Display"] as const;
+const PRESET_BACKGROUND_COLORS = [
+  { label: "Periwinkle", value: "#8EA2FF" },
+  { label: "Mint", value: "#3FE88A" },
+  { label: "Charcoal", value: "#1F2937" },
+  { label: "Snow", value: "#F8FAFC" },
+] as const;
+const HEX_COLOR = /^#(?:[A-Fa-f0-9]{3}|[A-Fa-f0-9]{6})$/;
 
 export function CanvasSidebar({
   slideElements,
@@ -41,55 +53,183 @@ export function CanvasSidebar({
   onReplaceImage,
 }: Props) {
   const selected = slideElements.find((el) => selectedIds[0] === el.id);
+  const selectedElements = slideElements.filter((el) =>
+    selectedIds.includes(el.id),
+  );
+  const hasMultiSameTypeSelection =
+    selectedElements.length > 1 &&
+    selectedElements.every((el) => el.type === selectedElements[0].type);
+
+  const applyStyleUpdate = (updates: Partial<SlideElement>) => {
+    if (!selected) return;
+    onUpdateElement(
+      selected.id,
+      updates,
+      hasMultiSameTypeSelection ? "matching-selection" : "single",
+    );
+  };
+
+  const isDefaultBackground = backgroundColor.trim().length === 0;
+  const colorPickerValue = HEX_COLOR.test(backgroundColor.trim())
+    ? backgroundColor.trim()
+    : "#ffffff";
 
   return (
     <div className="w-full h-full bg-card border-l border-border p-3 space-y-4 overflow-y-auto">
       <div className="space-y-1">
         <h3 className="text-sm font-semibold">Canvas Tools</h3>
-        <p className="text-[11px] text-muted-foreground">Desktop-first visual editor</p>
+        <p className="text-[11px] text-muted-foreground">
+          Desktop-first visual editor
+        </p>
       </div>
 
-      <div className="space-y-2">
-        <p className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
-          Background
+      <div className="space-y-3 rounded-xl border border-border/80 bg-muted/30 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+            Brand Colors
+          </p>
+          <label className="inline-flex h-7 cursor-pointer items-center rounded-md border border-border/80 px-2 text-[10px] font-semibold tracking-wide text-foreground/90 transition-colors hover:bg-muted/70">
+            Custom Theme
+            <input
+              type="color"
+              value={colorPickerValue}
+              onChange={(evt) => onBackgroundColor(evt.target.value)}
+              className="sr-only"
+              aria-label="Pick custom canvas background color"
+            />
+          </label>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            title="Use default canvas background"
+            onClick={() => onBackgroundColor("")}
+            className={cn(
+              "relative h-10 w-10 overflow-hidden rounded-full border border-border/80",
+              "transition-all duration-150",
+              isDefaultBackground
+                ? "ring-2 ring-primary ring-offset-2 ring-offset-card"
+                : "hover:scale-[1.03]",
+            )}
+          >
+            <span className="absolute inset-0 bg-[linear-gradient(45deg,#E5E7EB_25%,transparent_25%,transparent_50%,#E5E7EB_50%,#E5E7EB_75%,transparent_75%,transparent)] [background-size:10px_10px]" />
+          </button>
+
+          {PRESET_BACKGROUND_COLORS.map((color) => {
+            const selectedColor =
+              !isDefaultBackground &&
+              backgroundColor.toLowerCase() === color.value.toLowerCase();
+            return (
+              <button
+                key={color.value}
+                type="button"
+                title={color.label}
+                onClick={() => onBackgroundColor(color.value)}
+                className={cn(
+                  "h-10 w-10 rounded-full border border-black/10 transition-all duration-150",
+                  selectedColor
+                    ? "ring-2 ring-primary ring-offset-2 ring-offset-card"
+                    : "hover:scale-[1.03]",
+                )}
+                style={{ backgroundColor: color.value }}
+              />
+            );
+          })}
+
+          <label className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-dashed border-border/80 text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground">
+            <Plus className="h-4 w-4" />
+            <input
+              type="color"
+              value={colorPickerValue}
+              onChange={(evt) => onBackgroundColor(evt.target.value)}
+              className="sr-only"
+              aria-label="Add custom background color"
+            />
+          </label>
+        </div>
+
+        <p className="text-[10px] text-muted-foreground">
+          Grid and ruler marks stay visible on light and dark backgrounds.
         </p>
-        <input
-          type="color"
-          value={backgroundColor}
-          onChange={(evt) => onBackgroundColor(evt.target.value)}
-          className="w-full h-9 rounded-md border border-border bg-transparent"
-        />
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <Button size="sm" variant="secondary" className="text-[11px]" onClick={() => onAlign("left")}>
+        <Button
+          size="sm"
+          variant="secondary"
+          className="text-[11px]"
+          onClick={() => onAlign("left")}
+        >
           Align Left
         </Button>
-        <Button size="sm" variant="secondary" className="text-[11px]" onClick={() => onAlign("right")}>
+        <Button
+          size="sm"
+          variant="secondary"
+          className="text-[11px]"
+          onClick={() => onAlign("right")}
+        >
           Align Right
         </Button>
-        <Button size="sm" variant="secondary" className="text-[11px]" onClick={() => onAlign("top")}>
+        <Button
+          size="sm"
+          variant="secondary"
+          className="text-[11px]"
+          onClick={() => onAlign("top")}
+        >
           Align Top
         </Button>
-        <Button size="sm" variant="secondary" className="text-[11px]" onClick={() => onAlign("bottom")}>
+        <Button
+          size="sm"
+          variant="secondary"
+          className="text-[11px]"
+          onClick={() => onAlign("bottom")}
+        >
           Align Bottom
         </Button>
-        <Button size="sm" variant="secondary" className="text-[11px]" onClick={() => onAlign("center")}>
+        <Button
+          size="sm"
+          variant="secondary"
+          className="text-[11px]"
+          onClick={() => onAlign("center")}
+        >
           Align Center
         </Button>
-        <Button size="sm" variant="outline" className="text-[11px]" onClick={onDuplicate}>
+        <Button
+          size="sm"
+          variant="outline"
+          className="text-[11px]"
+          onClick={onDuplicate}
+        >
           Duplicate
         </Button>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <Button size="sm" variant="outline" className="text-[11px]" onClick={() => onDistribute("horizontal")}>
+        <Button
+          size="sm"
+          variant="outline"
+          className="text-[11px]"
+          onClick={() => onDistribute("horizontal")}
+        >
           Distribute H
         </Button>
-        <Button size="sm" variant="outline" className="text-[11px]" onClick={() => onDistribute("vertical")}>
+        <Button
+          size="sm"
+          variant="outline"
+          className="text-[11px]"
+          onClick={() => onDistribute("vertical")}
+        >
           Distribute V
         </Button>
       </div>
+
+      {hasMultiSameTypeSelection ? (
+        <div className="rounded-md border border-primary/30 bg-primary/10 px-2 py-1.5 text-[10px] text-foreground/85">
+          Style changes apply to all selected {selectedElements[0].type}{" "}
+          elements.
+        </div>
+      ) : null}
 
       {selected?.type === "text" && (
         <div className="space-y-2 rounded-lg border border-border p-2.5">
@@ -98,15 +238,20 @@ export function CanvasSidebar({
           </p>
           <textarea
             value={selected.text}
-            onChange={(evt) => onUpdateElement(selected.id, { text: evt.target.value })}
+            onChange={(evt) =>
+              onUpdateElement(selected.id, { text: evt.target.value }, "single")
+            }
             className="w-full min-h-20 rounded-md border border-border bg-background px-2 py-1 text-xs"
           />
           <div className="grid grid-cols-2 gap-2">
             <select
               value={selected.fontFamily}
               onChange={(evt) =>
-                onUpdateElement(selected.id, {
-                  fontFamily: evt.target.value as "Inter" | "Poppins" | "Playfair Display",
+                applyStyleUpdate({
+                  fontFamily: evt.target.value as
+                    | "Inter"
+                    | "Poppins"
+                    | "Playfair Display",
                 })
               }
               className="h-8 rounded-md border border-border bg-background text-xs px-2"
@@ -120,18 +265,26 @@ export function CanvasSidebar({
             <input
               type="number"
               value={selected.fontSize}
-              onChange={(evt) => onUpdateElement(selected.id, { fontSize: Number(evt.target.value) || 16 })}
+              onChange={(evt) =>
+                applyStyleUpdate({
+                  fontSize: Number(evt.target.value) || 16,
+                })
+              }
               className="h-8 rounded-md border border-border bg-background text-xs px-2"
             />
             <input
               type="color"
               value={selected.fill}
-              onChange={(evt) => onUpdateElement(selected.id, { fill: evt.target.value })}
+              onChange={(evt) => applyStyleUpdate({ fill: evt.target.value })}
               className="h-8 rounded-md border border-border bg-background"
             />
             <select
               value={selected.align ?? "left"}
-              onChange={(evt) => onUpdateElement(selected.id, { align: evt.target.value as "left" | "center" | "right" })}
+              onChange={(evt) =>
+                applyStyleUpdate({
+                  align: evt.target.value as "left" | "center" | "right",
+                })
+              }
               className="h-8 rounded-md border border-border bg-background text-xs px-2"
             >
               <option value="left">Left</option>
@@ -142,14 +295,22 @@ export function CanvasSidebar({
               type="number"
               step="0.05"
               value={selected.lineHeight ?? 1.3}
-              onChange={(evt) => onUpdateElement(selected.id, { lineHeight: Number(evt.target.value) || 1.3 })}
+              onChange={(evt) =>
+                applyStyleUpdate({
+                  lineHeight: Number(evt.target.value) || 1.3,
+                })
+              }
               className="h-8 rounded-md border border-border bg-background text-xs px-2"
             />
             <input
               type="number"
               step="0.1"
               value={selected.letterSpacing ?? 0}
-              onChange={(evt) => onUpdateElement(selected.id, { letterSpacing: Number(evt.target.value) || 0 })}
+              onChange={(evt) =>
+                applyStyleUpdate({
+                  letterSpacing: Number(evt.target.value) || 0,
+                })
+              }
               className="h-8 rounded-md border border-border bg-background text-xs px-2"
             />
           </div>
@@ -168,7 +329,11 @@ export function CanvasSidebar({
               max={1}
               step={0.05}
               value={selected.opacity ?? 1}
-              onChange={(evt) => onUpdateElement(selected.id, { opacity: Number(evt.target.value) })}
+              onChange={(evt) =>
+                applyStyleUpdate({
+                  opacity: Number(evt.target.value),
+                })
+              }
             />
             <input
               type="range"
@@ -176,11 +341,20 @@ export function CanvasSidebar({
               max={120}
               step={2}
               value={selected.cornerRadius ?? 0}
-              onChange={(evt) => onUpdateElement(selected.id, { cornerRadius: Number(evt.target.value) })}
+              onChange={(evt) =>
+                applyStyleUpdate({
+                  cornerRadius: Number(evt.target.value),
+                })
+              }
             />
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <Button size="sm" variant="outline" className="text-[11px]" onClick={onRegenerateImage}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-[11px]"
+              onClick={onRegenerateImage}
+            >
               <WandSparkles className="w-3.5 h-3.5 mr-1" />
               Regen
             </Button>

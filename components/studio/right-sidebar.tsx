@@ -55,8 +55,29 @@ export function RightSidebar() {
           pushHistory();
           setBackgroundColor(color);
         }}
-        onUpdateElement={(id, updates) => {
+        onUpdateElement={(id, updates, applyScope = "single") => {
           pushHistory();
+
+          if (applyScope === "matching-selection") {
+            const source = slide.elements.find((el) => el.id === id);
+            if (source) {
+              const matchingIds = slide.elements
+                .filter(
+                  (el) =>
+                    selectedElementIds.includes(el.id) &&
+                    el.type === source.type,
+                )
+                .map((el) => el.id);
+
+              if (matchingIds.length > 1) {
+                matchingIds.forEach((targetId) => {
+                  updateElement(targetId, updates);
+                });
+                return;
+              }
+            }
+          }
+
           updateElement(id, updates);
         }}
         onAlign={(dir) => {
@@ -90,7 +111,10 @@ export function RightSidebar() {
             const res = await fetch("/api/generate-image", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ prompt: currentCard.imagePrompt, aspectRatio }),
+              body: JSON.stringify({
+                prompt: currentCard.imagePrompt,
+                aspectRatio,
+              }),
             });
             const data = await res.json();
             if (!res.ok || !data.imageUrl) {
@@ -100,7 +124,9 @@ export function RightSidebar() {
             toast.success("Image regenerated");
           } catch (error: unknown) {
             const message =
-              error instanceof Error ? error.message : "Failed to regenerate image";
+              error instanceof Error
+                ? error.message
+                : "Failed to regenerate image";
             toast.error(message);
           }
         }}

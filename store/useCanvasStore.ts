@@ -49,7 +49,7 @@ const defaultSlideFromCard = (
 
   return {
     cardId: card.id,
-    backgroundColor: theme.style === "bold" ? theme.primaryColor : "#ffffff",
+    backgroundColor: "",
     elements: [
       imageElement,
       {

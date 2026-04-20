@@ -45,6 +45,37 @@ const SNAP_THRESHOLD = 6;
 const MIN_TEXT_BOX_WIDTH = 120;
 const MIN_TEXT_BOX_HEIGHT = 48;
 const CLICK_TO_ADD_TEXT_WIDTH = 360;
+const GRID_STEP = 40;
+const RULER_STEP = 100;
+const RULER_SIZE = 24;
+
+const HEX_COLOR = /^#(?:[A-Fa-f0-9]{3}|[A-Fa-f0-9]{6})$/;
+
+const parseHexRgb = (hex: string) => {
+  if (!HEX_COLOR.test(hex)) return null;
+  const raw = hex.slice(1);
+  const normalized =
+    raw.length === 3
+      ? raw
+          .split("")
+          .map((part) => `${part}${part}`)
+          .join("")
+      : raw;
+  const value = Number.parseInt(normalized, 16);
+  return {
+    r: (value >> 16) & 255,
+    g: (value >> 8) & 255,
+    b: value & 255,
+  };
+};
+
+const getGridStroke = (backgroundColor: string) => {
+  const rgb = parseHexRgb(backgroundColor.trim());
+  if (!rgb) return "rgba(71,85,105,0.36)";
+
+  const luminance = (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
+  return luminance > 0.55 ? "rgba(15,23,42,0.22)" : "rgba(241,245,249,0.34)";
+};
 
 const normalizeRect = (
   startX: number,
@@ -98,6 +129,16 @@ export function CanvasStage({
     return Number.isFinite(scale) && scale > 0 ? scale : 1;
   }, [canvasSize.height, canvasSize.width, viewport.height, viewport.width]);
 
+  const stageOffsetX = (viewport.width - canvasSize.width * fit) / 2;
+  const stageOffsetY = (viewport.height - canvasSize.height * fit) / 2;
+  const stagePixelWidth = canvasSize.width * fit;
+  const stagePixelHeight = canvasSize.height * fit;
+
+  const gridStroke = useMemo(
+    () => getGridStroke(backgroundColor),
+    [backgroundColor],
+  );
+
   useEffect(() => {
     const node = wrapRef.current;
     if (!node) return;
@@ -134,6 +175,36 @@ export function CanvasStage({
       textDraft.currentY,
     );
   }, [activeTool, textDraft]);
+
+  const rulerTicksX = useMemo(
+    () =>
+      Array.from({ length: Math.floor(canvasSize.width / RULER_STEP) + 1 }).map(
+        (_, i) => {
+          const value = i * RULER_STEP;
+          return {
+            value,
+            x: value * fit,
+            major: value % (RULER_STEP * 2) === 0,
+          };
+        },
+      ),
+    [canvasSize.width, fit],
+  );
+
+  const rulerTicksY = useMemo(
+    () =>
+      Array.from({
+        length: Math.floor(canvasSize.height / RULER_STEP) + 1,
+      }).map((_, i) => {
+        const value = i * RULER_STEP;
+        return {
+          value,
+          y: value * fit,
+          major: value % (RULER_STEP * 2) === 0,
+        };
+      }),
+    [canvasSize.height, fit],
+  );
 
   const toCanvasPoint = (stage: Konva.Stage) => {
     const pointer = stage.getPointerPosition();
@@ -365,6 +436,10 @@ export function CanvasStage({
     [canvasSize.width, canvasSize.height],
   );
 
+  const handleDragEnd = useCallback(() => {
+    setGuides({ x: null, y: null });
+  }, []);
+
   return (
     <div
       ref={wrapRef}
@@ -387,8 +462,8 @@ export function CanvasStage({
         width={viewport.width}
         height={viewport.height}
         scale={{ x: fit, y: fit }}
-        x={(viewport.width - canvasSize.width * fit) / 2}
-        y={(viewport.height - canvasSize.height * fit) / 2}
+        x={stageOffsetX}
+        y={stageOffsetY}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -400,35 +475,43 @@ export function CanvasStage({
         }}
       >
         <Layer>
-          <Rect
-            width={canvasSize.width}
-            height={canvasSize.height}
-            fill={backgroundColor}
-          />
-
+          {backgroundColor ? (
+            <Rect
+              width={canvasSize.width}
+              height={canvasSize.height}
+              fill={backgroundColor}
+              listening={false}
+            />
+          ) : null}
           {gridEnabled
-            ? Array.from({ length: Math.floor(canvasSize.width / 40) }).map(
-                (_, i) => (
-                  <Line
-                    key={`grid-v-${i}`}
-                    points={[i * 40, 0, i * 40, canvasSize.height]}
-                    stroke="rgba(148,163,184,0.22)"
-                    strokeWidth={1}
-                  />
-                ),
-              )
+            ? Array.from({
+                length: Math.floor(canvasSize.width / GRID_STEP) + 1,
+              }).map((_, i) => (
+                <Line
+                  key={`grid-v-${i}`}
+                  points={[i * GRID_STEP, 0, i * GRID_STEP, canvasSize.height]}
+                  stroke={gridStroke}
+                  strokeWidth={1}
+                  strokeScaleEnabled={false}
+                  listening={false}
+                  perfectDrawEnabled={false}
+                />
+              ))
             : null}
           {gridEnabled
-            ? Array.from({ length: Math.floor(canvasSize.height / 40) }).map(
-                (_, i) => (
-                  <Line
-                    key={`grid-h-${i}`}
-                    points={[0, i * 40, canvasSize.width, i * 40]}
-                    stroke="rgba(148,163,184,0.22)"
-                    strokeWidth={1}
-                  />
-                ),
-              )
+            ? Array.from({
+                length: Math.floor(canvasSize.height / GRID_STEP) + 1,
+              }).map((_, i) => (
+                <Line
+                  key={`grid-h-${i}`}
+                  points={[0, i * GRID_STEP, canvasSize.width, i * GRID_STEP]}
+                  stroke={gridStroke}
+                  strokeWidth={1}
+                  strokeScaleEnabled={false}
+                  listening={false}
+                  perfectDrawEnabled={false}
+                />
+              ))
             : null}
 
           {elements.map((element) => (
@@ -441,7 +524,7 @@ export function CanvasStage({
               onSelect={onSelect}
               onChange={onChangeElement}
               onDragMove={handleDragMove}
-              onDragEnd={useCallback(() => setGuides({ x: null, y: null }), [])}
+              onDragEnd={handleDragEnd}
               onDoubleClickText={onDoubleClickText}
             />
           ))}
@@ -477,6 +560,8 @@ export function CanvasStage({
               stroke="#22C55E"
               strokeWidth={1}
               dash={[6, 6]}
+              strokeScaleEnabled={false}
+              listening={false}
             />
           ) : null}
           {guides.y !== null ? (
@@ -485,6 +570,8 @@ export function CanvasStage({
               stroke="#22C55E"
               strokeWidth={1}
               dash={[6, 6]}
+              strokeScaleEnabled={false}
+              listening={false}
             />
           ) : null}
 
@@ -498,10 +585,73 @@ export function CanvasStage({
       </Stage>
 
       {rulerEnabled ? (
-        <>
-          <div className="absolute top-0 left-6 right-0 h-6 bg-card/85 border-b border-border pointer-events-none" />
-          <div className="absolute top-6 left-0 bottom-0 w-6 bg-card/85 border-r border-border pointer-events-none" />
-        </>
+        <div className="pointer-events-none absolute inset-0">
+          <div
+            className="absolute rounded-t-md border border-border/80 bg-card/95 dark:border-slate-600/70 dark:bg-slate-900/80"
+            style={{
+              top: stageOffsetY,
+              left: stageOffsetX,
+              width: stagePixelWidth,
+              height: RULER_SIZE,
+            }}
+          >
+            {rulerTicksX.map((tick) => (
+              <div
+                key={`ruler-x-${tick.value}`}
+                className="absolute top-0"
+                style={{ left: tick.x }}
+              >
+                <div
+                  className="w-px bg-foreground/45 dark:bg-slate-100/85"
+                  style={{ height: tick.major ? 12 : 8 }}
+                />
+                {tick.major ? (
+                  <span className="absolute left-1 top-[11px] text-[9px] leading-none text-foreground/85 dark:text-slate-100">
+                    {tick.value}
+                  </span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+
+          <div
+            className="absolute rounded-l-md border border-border/80 bg-card/95 dark:border-slate-600/70 dark:bg-slate-900/80"
+            style={{
+              top: stageOffsetY,
+              left: stageOffsetX,
+              width: RULER_SIZE,
+              height: stagePixelHeight,
+            }}
+          >
+            {rulerTicksY.map((tick) => (
+              <div
+                key={`ruler-y-${tick.value}`}
+                className="absolute left-0"
+                style={{ top: tick.y }}
+              >
+                <div
+                  className="h-px bg-foreground/45 dark:bg-slate-100/85"
+                  style={{ width: tick.major ? 12 : 8 }}
+                />
+                {tick.major ? (
+                  <span className="absolute left-[11px] top-[2px] origin-top-left -rotate-90 text-[9px] leading-none text-foreground/85 dark:text-slate-100">
+                    {tick.value}
+                  </span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+
+          <div
+            className="absolute rounded-tl-md border border-border/80 bg-card/95 dark:border-slate-600/70 dark:bg-slate-900/90"
+            style={{
+              top: stageOffsetY,
+              left: stageOffsetX,
+              width: RULER_SIZE,
+              height: RULER_SIZE,
+            }}
+          />
+        </div>
       ) : null}
     </div>
   );
