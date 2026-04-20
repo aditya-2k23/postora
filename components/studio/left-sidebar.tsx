@@ -345,12 +345,15 @@ export function LeftSidebar() {
         <div className="flex items-center gap-2">
           <div
             className="w-7 h-7 rounded-lg flex items-center justify-center shadow-sm"
-            style={{ backgroundColor: accent, color: getAccessibleTextColor(accent) }}
+            style={{
+              backgroundColor: accent,
+              color: getAccessibleTextColor(accent),
+            }}
           >
             <Sparkles className="w-3.5 h-3.5" />
           </div>
           <span className="font-semibold text-sm text-foreground">
-            AI Studio
+            AI Assistant
           </span>
         </div>
         <DropdownMenu>
@@ -555,7 +558,10 @@ export function LeftSidebar() {
                 disabled={isGenerating || !inputValue.trim()}
                 size="icon"
                 className="h-[36px] w-[36px] shrink-0 shadow-sm hover:opacity-90 rounded-lg mb-1"
-                style={{ backgroundColor: accent, color: getAccessibleTextColor(accent) }}
+                style={{
+                  backgroundColor: accent,
+                  color: getAccessibleTextColor(accent),
+                }}
               >
                 {isGenerating ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -681,7 +687,10 @@ export function LeftSidebar() {
                 }
                 size="icon"
                 className="h-[36px] w-[36px] shrink-0 shadow-sm hover:opacity-90 rounded-lg mb-1"
-                style={{ backgroundColor: accent, color: getAccessibleTextColor(accent) }}
+                style={{
+                  backgroundColor: accent,
+                  color: getAccessibleTextColor(accent),
+                }}
               >
                 {isAssistantThinking ? (
                   <Loader2 className="w-4 h-4 animate-spin" />

@@ -144,7 +144,7 @@ export function StudioNavbar() {
           AI
         </div>
         <span className="font-semibold text-sm tracking-tight text-foreground">
-          AI Social Studio Editor
+          Postora Studio Editor
         </span>
       </div>
 
