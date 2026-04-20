@@ -1,96 +1,63 @@
-import { GoogleGenAI } from "@google/genai";
+import { InferenceClient } from "@huggingface/inference";
 import { NextResponse } from "next/server";
 
-// Hugging Face fallback – uses the free Serverless Inference API
-async function generateWithHuggingFace(prompt: string): Promise<string | null> {
-  const hfKey = process.env.HUGGINGFACE_API_KEY;
-  if (!hfKey) return null;
+const HUGGING_FACE_IMAGE_MODELS = [
+  "black-forest-labs/FLUX.1-schnell",
+  "black-forest-labs/FLUX.1-dev",
+  "stabilityai/sdxl-turbo",
+];
 
-  const model = "stabilityai/stable-diffusion-xl-base-1.0";
-  try {
-    const res = await fetch(
-      `https://api-inference.huggingface.co/models/${model}`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${hfKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ inputs: prompt }),
-      },
-    );
-
-    if (!res.ok) return null;
-
-    const blob = await res.arrayBuffer();
-    const base64 = Buffer.from(blob).toString("base64");
-    return `data:image/png;base64,${base64}`;
-  } catch {
-    return null;
-  }
+function getHuggingFaceToken(): string {
+  return (process.env.HUGGINGFACE_API_KEY || "").replace(/['"]/g, "").trim();
 }
 
-// ---------------------------------------------------------------------------
-// Gemini image generation — single model, no retry on 429, 8s timeout
-// ---------------------------------------------------------------------------
-const GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image";
-
-async function generateWithGemini(
-  ai: GoogleGenAI,
+async function generateWithHuggingFace(
   prompt: string,
+  hfKey: string,
 ): Promise<string | null> {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
+  const client = new InferenceClient(hfKey);
 
-    const response = await ai.models.generateContent({
-      model: GEMINI_IMAGE_MODEL,
-      contents: prompt,
-      config: {
-        responseModalities: ["IMAGE", "TEXT"],
-      },
-      // @ts-expect-error -- AbortSignal accepted at runtime
-      signal: controller.signal,
-    });
+  for (const model of HUGGING_FACE_IMAGE_MODELS) {
+    try {
+      const imageBlob = await client.textToImage(
+        {
+          model,
+          inputs: prompt,
+          provider: "auto",
+        },
+        {
+          outputType: "blob",
+        },
+      );
 
-    clearTimeout(timeout);
+      const contentType = imageBlob.type || "image/png";
+      const blob = await imageBlob.arrayBuffer();
+      const base64 = Buffer.from(blob).toString("base64");
 
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData) {
-        const base64 = part.inlineData.data;
-        const mime = part.inlineData.mimeType || "image/png";
-        return `data:${mime};base64,${base64}`;
+      if (!base64) {
+        console.warn(
+          `[generate-image] Hugging Face ${model} returned empty image data`,
+        );
+        continue;
       }
-    }
 
-    console.warn("[generate-image] Gemini returned no image data");
-    return null;
-  } catch (err: any) {
-    if (err?.name === "AbortError") {
-      console.warn("[generate-image] Gemini timed out after 8s");
-      return null;
+      return `data:${contentType};base64,${base64}`;
+    } catch (error: any) {
+      console.warn(
+        `[generate-image] Hugging Face ${model} failed:`,
+        error?.message?.substring(0, 240) ?? error,
+      );
     }
-    const status = err?.status ?? err?.response?.status;
-    console.warn(
-      `[generate-image] ${GEMINI_IMAGE_MODEL} failed (${status ?? "unknown"}):`,
-      err.message?.substring(0, 200) ?? err,
-    );
-    return null; // skip to HF fallback
   }
+
+  return null;
 }
 
-// ---------------------------------------------------------------------------
 // POST handler
-// ---------------------------------------------------------------------------
 export async function POST(req: Request) {
   try {
-    let key =
-      process.env.GEMINI_API_KEY ||
-      process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
-      "";
-    key = key.replace(/['"]/g, "").trim();
-
     const { prompt } = await req.json();
+    const hfKey = getHuggingFaceToken();
 
     if (!prompt) {
       return NextResponse.json(
@@ -99,22 +66,17 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1. Try Gemini (primary)
-    if (key) {
-      const ai = new GoogleGenAI({ apiKey: key });
-      const imageUrl = await generateWithGemini(ai, prompt);
-      if (imageUrl) {
-        return NextResponse.json({ imageUrl });
-      }
-      console.warn(
-        "[generate-image] Gemini failed, trying HF fallback…",
+    if (!hfKey) {
+      return NextResponse.json(
+        {
+          error:
+            "Hugging Face token is missing. Add HUGGINGFACE_API_KEY (or HUGGING_FACE_API_KEY / HF_TOKEN) to your .env file to enable image generation.",
+        },
+        { status: 500 },
       );
-    } else {
-      console.warn("[generate-image] No Gemini API key, trying HF fallback…");
     }
 
-    // 2. Hugging Face fallback
-    const hfUrl = await generateWithHuggingFace(prompt);
+    const hfUrl = await generateWithHuggingFace(prompt, hfKey);
     if (hfUrl) {
       return NextResponse.json({ imageUrl: hfUrl });
     }
@@ -122,7 +84,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error:
-          "Image generation quota exhausted for today. Images will be available once the daily free-tier quota resets. Add a HUGGINGFACE_API_KEY to .env to enable fallback image generation.",
+          "All configured Hugging Face image models failed for this request. Verify token permission 'Make calls to Inference Providers' and available Hugging Face credits.",
       },
       { status: 503 },
     );

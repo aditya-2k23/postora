@@ -10,6 +10,18 @@ import { CanvasStage } from "@/components/editor/CanvasStage";
 import { TextEditorOverlay } from "@/components/editor/TextEditorOverlay";
 import { LayoutTemplate } from "lucide-react";
 
+const isTypingTarget = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) return false;
+
+  const tag = target.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+    return true;
+  }
+
+  if (target.isContentEditable) return true;
+  return Boolean(target.closest("[contenteditable='true']"));
+};
+
 export function CanvasEditor() {
   const { cards, activeCardId, aspectRatio, themeSettings } = useStudioStore();
   const {
@@ -87,6 +99,20 @@ export function CanvasEditor() {
 
   useEffect(() => {
     const handler = (evt: KeyboardEvent) => {
+      if (isTypingTarget(evt.target)) {
+        return;
+      }
+
+      const selectedTextElement =
+        selectedElementIds.length === 1
+          ? slide?.elements.find(
+              (el) =>
+                el.id === selectedElementIds[0] &&
+                el.type === "text" &&
+                !el.locked,
+            )
+          : undefined;
+
       const isMeta = evt.metaKey || evt.ctrlKey;
       if (isMeta && evt.key.toLowerCase() === "z") {
         evt.preventDefault();
@@ -106,6 +132,18 @@ export function CanvasEditor() {
       }
       if (evt.key === "Delete" || evt.key === "Backspace") {
         if (selectedElementIds.length === 0) return;
+
+        if (evt.key === "Backspace" && selectedTextElement?.type === "text") {
+          evt.preventDefault();
+          if (selectedTextElement.text.length > 0) {
+            pushHistory();
+            updateElement(selectedTextElement.id, {
+              text: selectedTextElement.text.slice(0, -1),
+            });
+          }
+          return;
+        }
+
         evt.preventDefault();
         pushHistory();
         deleteSelected();
@@ -132,8 +170,10 @@ export function CanvasEditor() {
     pasteClipboard,
     pushHistory,
     redo,
-    selectedElementIds.length,
+    selectedElementIds,
+    slide,
     undo,
+    updateElement,
   ]);
 
   if (!cards.length || !slide) {

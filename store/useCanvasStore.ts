@@ -15,11 +15,37 @@ import type {
 import { ASPECT_RATIO_DIMENSIONS } from "@/types/canvas";
 
 const HISTORY_LIMIT = 100;
+const MAX_PERSISTED_DATA_URL_LENGTH = 12_000;
 
 const uid = () => crypto.randomUUID();
 
 const cloneSlides = (slides: Record<string, CanvasSlide>) =>
   structuredClone(slides);
+
+const sanitizePersistedSlides = (slides: Record<string, CanvasSlide>) => {
+  const sanitized: Record<string, CanvasSlide> = {};
+
+  for (const [cardId, slide] of Object.entries(slides)) {
+    sanitized[cardId] = {
+      ...slide,
+      // Keep element geometry and styling, but drop oversized embedded image payloads.
+      elements: slide.elements.map((element) => {
+        if (element.type !== "image") return element;
+
+        if (
+          element.src.startsWith("data:") &&
+          element.src.length > MAX_PERSISTED_DATA_URL_LENGTH
+        ) {
+          return { ...element, src: "" };
+        }
+
+        return element;
+      }),
+    };
+  }
+
+  return sanitized;
+};
 
 const getCanvasSize = (ratio: string) =>
   ASPECT_RATIO_DIMENSIONS[(ratio as AspectRatio) || "4:5"] ??
@@ -787,7 +813,7 @@ export const useCanvasStore = create<CanvasState>()(
     {
       name: "studio-canvas-storage",
       partialize: (state) => ({
-        slidesByCardId: state.slidesByCardId,
+        slidesByCardId: sanitizePersistedSlides(state.slidesByCardId),
         currentSlideId: state.currentSlideId,
         activeTool: state.activeTool,
         gridEnabled: state.gridEnabled,

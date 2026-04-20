@@ -1,6 +1,6 @@
 "use client";
 
-import { useStudioStore } from "@/store/useStudioStore";
+import { useStudioStore, type SocialCard } from "@/store/useStudioStore";
 import { getAccessibleTextColor } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -174,10 +174,34 @@ export function LeftSidebar() {
 
       pushUndo();
 
-      const generatedCards = data.cards.map((c: any) => ({
-        id: crypto.randomUUID(),
-        ...c,
-      }));
+      const rawCards = Array.isArray(data?.cards)
+        ? data.cards
+        : Array.isArray(data)
+          ? data
+          : [];
+
+      const generatedCards: SocialCard[] = rawCards
+        .map((c: any) => ({
+          id: crypto.randomUUID(),
+          title: typeof c?.title === "string" ? c.title : "",
+          content:
+            typeof c?.content === "string"
+              ? c.content
+              : typeof c?.body === "string"
+                ? c.body
+                : "",
+          imagePrompt: typeof c?.imagePrompt === "string" ? c.imagePrompt : "",
+        }))
+        .filter(
+          (c: SocialCard) =>
+            c.title.trim().length > 0 && c.content.trim().length > 0,
+        );
+
+      if (generatedCards.length === 0) {
+        throw new Error(
+          "Generator returned invalid cards format. Please try again.",
+        );
+      }
 
       setCards(generatedCards);
       if (generatedCards.length > 0) setActiveCardId(generatedCards[0].id);

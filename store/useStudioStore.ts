@@ -83,6 +83,23 @@ const defaultTheme: ThemeSettings = {
   roundness: 16,
 };
 
+const MAX_PERSISTED_DATA_URL_LENGTH = 12_000;
+
+const sanitizePersistedCards = (cards: SocialCard[]): SocialCard[] =>
+  cards.map((card) => {
+    const imageUrl = card.imageUrl;
+    if (
+      typeof imageUrl === "string" &&
+      imageUrl.startsWith("data:") &&
+      imageUrl.length > MAX_PERSISTED_DATA_URL_LENGTH
+    ) {
+      const { imageUrl: _removed, ...rest } = card;
+      return rest;
+    }
+
+    return card;
+  });
+
 export const useStudioStore = create<StudioState>()(
   persist(
     (set, get) => ({
@@ -204,7 +221,7 @@ export const useStudioStore = create<StudioState>()(
         platform: state.platform,
         aspectRatio: state.aspectRatio,
         numCards: state.numCards,
-        cards: state.cards,
+        cards: sanitizePersistedCards(state.cards),
         themeSettings: state.themeSettings,
         chatHistory: state.chatHistory,
         // Don't persist assistant history — it's session-based

@@ -32,6 +32,51 @@ const cardSchema = {
   },
 };
 
+type NormalizedCard = {
+  title: string;
+  content: string;
+  imagePrompt: string;
+};
+
+function normalizeGeneratedCards(payload: unknown): NormalizedCard[] | null {
+  const rawCards = Array.isArray(payload)
+    ? payload
+    : payload &&
+        typeof payload === "object" &&
+        Array.isArray((payload as { cards?: unknown }).cards)
+      ? (payload as { cards: unknown[] }).cards
+      : null;
+
+  if (!rawCards) return null;
+
+  const normalized = rawCards
+    .filter(
+      (item): item is Record<string, unknown> =>
+        Boolean(item) && typeof item === "object",
+    )
+    .map((item) => {
+      const title = typeof item.title === "string" ? item.title.trim() : "";
+      const content =
+        typeof item.content === "string"
+          ? item.content.trim()
+          : typeof item.body === "string"
+            ? item.body.trim()
+            : "";
+      const imagePrompt =
+        typeof item.imagePrompt === "string" ? item.imagePrompt.trim() : "";
+
+      return { title, content, imagePrompt };
+    })
+    .filter(
+      (card) =>
+        card.title.length > 0 &&
+        card.content.length > 0 &&
+        card.imagePrompt.length > 0,
+    );
+
+  return normalized.length > 0 ? normalized : null;
+}
+
 export async function POST(req: Request) {
   try {
     let key =
@@ -273,14 +318,14 @@ export async function POST(req: Request) {
           "cardNumber": 1,
           "role": "hook",
           "title": "Why Kids Forget So Fast",
-          "body": "Most children forget nearly half of what they learn within a day.",
+          "content": "Most children forget nearly half of what they learn within a day.",
           "imagePrompt": "A confused child looking at a blackboard that slowly fades into fog, soft morning light, minimalist illustration, centered composition"
         },
         {
           "cardNumber": 2,
           "role": "body",
           "title": "The Brain Deletes Unused Facts",
-          "body": "Your brain removes information it thinks you do not need. No review means faster forgetting.",
+          "content": "Your brain removes information it thinks you do not need. No review means faster forgetting.",
           "imagePrompt": "A glowing memory shelf inside a child’s mind with books disappearing one by one, dark background, soft blue lighting, flat illustration style"
         }
       ]
@@ -315,7 +360,12 @@ export async function POST(req: Request) {
           const text = response.text;
           if (!text) throw new Error("Empty response from Gemini");
 
-          const cards = JSON.parse(text);
+          const parsed = JSON.parse(text);
+          const cards = normalizeGeneratedCards(parsed);
+          if (!cards) {
+            throw new Error("Generator returned invalid cards format");
+          }
+
           return NextResponse.json({ cards });
         } catch (err: any) {
           lastError = err;
