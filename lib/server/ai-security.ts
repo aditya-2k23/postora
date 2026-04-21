@@ -264,6 +264,28 @@ export const consumeDailyQuota = async (uid: string, endpoint: AiEndpoint) => {
   };
 };
 
+export const refundDailyQuota = async (uid: string, endpoint: AiEndpoint) => {
+  if (process.env.ENFORCE_QUOTAS === "false") return;
+
+  const db = getFirebaseAdminDb();
+  const dateKey = getUtcDateKey();
+  const usageDocRef = db.doc(getUsageDocPath(uid, dateKey));
+  const field = COUNTER_FIELD_BY_ENDPOINT[endpoint];
+
+  try {
+    await usageDocRef.set(
+      {
+        [field]: FieldValue.increment(-1),
+        totalCount: FieldValue.increment(-1),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+  } catch (err) {
+    console.error(`[ai-security] Failed to refund quota for ${uid}:`, err);
+  }
+};
+
 type AiUsageEventParams = {
   uid: string;
   endpoint: AiEndpoint;

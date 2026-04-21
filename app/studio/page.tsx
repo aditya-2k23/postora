@@ -49,6 +49,7 @@ export default function StudioPage() {
   const platform = useStudioStore((s) => s.platform);
   const tone = useStudioStore((s) => s.tone);
   const aspectRatio = useStudioStore((s) => s.aspectRatio);
+  const numCards = useStudioStore((s) => s.numCards);
   const themeSettings = useStudioStore((s) => s.themeSettings);
   const cards = useStudioStore((s) => s.cards);
   const canvasSlides = useCanvasStore((s) => s.slidesByCardId);
@@ -59,7 +60,7 @@ export default function StudioPage() {
   const leftPanelRef = useRef<PanelImperativeHandle | null>(null);
   const rightPanelRef = useRef<PanelImperativeHandle | null>(null);
   const slidesPanelRef = useRef<PanelImperativeHandle | null>(null);
-  const hasReconciledRef = useRef(false);
+  const lastReconciledProjectIdRef = useRef<string | null>(null);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [slidesCollapsed, setSlidesCollapsed] = useState(false);
@@ -109,11 +110,10 @@ export default function StudioPage() {
       !user ||
       !projectId ||
       cards.length === 0 ||
-      hasReconciledRef.current
+      lastReconciledProjectIdRef.current === projectId
     )
       return;
 
-    let needsReconciliation = false;
     let needsMigration = false;
     for (const card of cards) {
       if (card.imageUrl && card.imageUrl.startsWith("data:image/")) {
@@ -122,7 +122,7 @@ export default function StudioPage() {
     }
 
     if (!needsMigration) {
-      hasReconciledRef.current = true;
+      lastReconciledProjectIdRef.current = projectId;
       return;
     }
 
@@ -167,7 +167,7 @@ export default function StudioPage() {
       } catch (error) {
         console.error("Failed to reconcile/migrate images:", error);
       } finally {
-        hasReconciledRef.current = true;
+        lastReconciledProjectIdRef.current = projectId;
       }
     };
 
@@ -232,6 +232,7 @@ export default function StudioPage() {
       platform,
       tone,
       aspectRatio,
+      numCards,
       themeSettings,
       cards,
     });
@@ -248,6 +249,7 @@ export default function StudioPage() {
           platform,
           tone,
           aspectRatio,
+          numCards,
           themeSettings,
           cards,
           updatedAt: serverTimestamp(),
@@ -278,6 +280,7 @@ export default function StudioPage() {
     platform,
     tone,
     aspectRatio,
+    numCards,
     themeSettings,
     cards,
     projectId,

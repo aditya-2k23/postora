@@ -348,8 +348,9 @@ export async function POST(req: Request) {
     });
 
     let lastError: any = null;
+    let finalReply: string | null = null;
 
-    for (const model of GEMINI_TEXT_MODELS) {
+    outer: for (const model of GEMINI_TEXT_MODELS) {
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
           selectedModel = model;
@@ -363,32 +364,14 @@ export async function POST(req: Request) {
             config: {
               systemInstruction,
               thinkingConfig: { thinkingBudget: 0 },
-              // Plain text response, no JSON schema
             },
           });
 
           const text = response.text;
           if (!text) throw new Error("Empty response from assistant");
 
-          const reply = text.trim();
-          const quota = await consumeDailyQuota(uid, "assistant-chat");
-
-          await recordAiUsageEvent({
-            uid,
-            endpoint: "assistant-chat",
-            success: true,
-            inputChars: message.length,
-            outputChars: reply.length,
-            model,
-            metadata: {
-              historyCount: history.length,
-              cardsCount: context.cards.length,
-              platform,
-              quotaRemaining: quota.remaining,
-            },
-          });
-
-          return NextResponse.json({ reply, quotaRemaining: quota.remaining });
+          finalReply = text.trim();
+          break outer;
         } catch (err: any) {
           lastError = err;
           const status = err?.status ?? err?.response?.status;
@@ -407,6 +390,39 @@ export async function POST(req: Request) {
           );
           break;
         }
+      }
+    }
+
+    if (finalReply) {
+      try {
+        const quota = await consumeDailyQuota(uid, "assistant-chat");
+
+        await recordAiUsageEvent({
+          uid,
+          endpoint: "assistant-chat",
+          success: true,
+          inputChars: message.length,
+          outputChars: finalReply.length,
+          model: selectedModel,
+          metadata: {
+            historyCount: history.length,
+            cardsCount: context.cards.length,
+            platform,
+            quotaRemaining: quota.remaining,
+          },
+        });
+
+        return NextResponse.json({
+          reply: finalReply,
+          quotaRemaining: quota.remaining,
+        });
+      } catch (postError: any) {
+        console.error("[assistant-chat] Post-processing error:", postError);
+        // Still return the reply even if quota/telemetry fails
+        return NextResponse.json({
+          reply: finalReply,
+          quotaRemaining: null,
+        });
       }
     }
 

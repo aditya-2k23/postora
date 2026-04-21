@@ -37,6 +37,7 @@ import {
   enforceIpRateLimit,
   QuotaExceededError,
   recordAiUsageEvent,
+  refundDailyQuota,
   toAiSecurityErrorResponse,
   ValidationError,
 } from "@/lib/server/ai-security";
@@ -166,11 +167,26 @@ export async function POST(req: Request) {
 
     if (idempotencyKey) {
       const idKeyRef = db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`);
+      const IDEMPOTENCY_STALE_MS = 120_000; // 2 minutes
+
       const idempotencyResult = await db.runTransaction(async (transaction) => {
         const idSnap = await transaction.get(idKeyRef);
         if (idSnap.exists) {
-          return { exists: true, data: idSnap.data() };
+          const data = idSnap.data();
+          const status = data?.status;
+          const createdAt = data?.createdAt?.toMillis?.() || 0;
+          const now = Date.now();
+          const isStale =
+            status === "pending" && now - createdAt > IDEMPOTENCY_STALE_MS;
+
+          if (status === "completed") {
+            return { exists: true, data };
+          }
+          if (status === "pending" && !isStale) {
+            return { exists: true, data };
+          }
         }
+
         transaction.set(idKeyRef, {
           status: "pending",
           createdAt: FieldValue.serverTimestamp(),
@@ -189,12 +205,12 @@ export async function POST(req: Request) {
         }
         return NextResponse.json(
           {
-            error:
-              idData?.status === "pending"
-                ? "A request with this idempotency key is already in progress."
-                : "A request with this idempotency key already failed. Please try a new key.",
+            status: "processing",
+            message:
+              "A request with this key is already in progress. Please wait.",
+            retry_after: 5,
           },
-          { status: idData?.status === "pending" ? 409 : 400 },
+          { status: 202 },
         );
       }
     }
@@ -208,14 +224,45 @@ export async function POST(req: Request) {
       .digest("hex");
 
     const cacheRef = db.doc(`users/${uid}/generatedImagesCache/${promptHash}`);
-    const cacheSnap = await cacheRef.get();
+
+    const cacheResult = await db.runTransaction(async (transaction) => {
+      const snap = await transaction.get(cacheRef);
+      if (snap.exists) {
+        const data = snap.data();
+        if (data?.status === "completed" && data?.secureUrl) {
+          return { hit: true, data };
+        }
+        const createdAtMillis = data?.createdAt?.toMillis?.() || 0;
+        const isStale =
+          data?.status === "pending" && Date.now() - createdAtMillis > 120_000;
+
+        if (data?.status === "pending" && !isStale) {
+          return { pending: true };
+        }
+      }
+
+      transaction.set(
+        cacheRef,
+        {
+          status: "pending",
+          prompt,
+          aspectRatio,
+          style,
+          promptHash,
+          uid,
+          createdAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+      return { miss: true };
+    });
 
     let secureUrl = "";
     let quotaRemaining = 0;
 
-    if (cacheSnap.exists && cacheSnap.data()?.secureUrl) {
-      secureUrl = cacheSnap.data()!.secureUrl;
-      selectedModel = cacheSnap.data()!.providerModel || "cache";
+    if (cacheResult.hit) {
+      secureUrl = cacheResult.data!.secureUrl;
+      selectedModel = cacheResult.data!.providerModel || "cache";
 
       try {
         const quotaStatus = await assertDailyQuotaAvailable(
@@ -225,63 +272,81 @@ export async function POST(req: Request) {
         quotaRemaining = quotaStatus.remaining;
       } catch (error) {
         if (error instanceof QuotaExceededError) {
-          // Cache hit should still be allowed even after the user has exhausted new-generation quota.
           quotaRemaining = 0;
         } else {
           throw error;
         }
       }
-    } else {
-      await assertDailyQuotaAvailable(uid, "generate-image");
-
-      const hfKey = getHuggingFaceToken();
-      if (!hfKey) {
-        return NextResponse.json(
-          {
-            error:
-              "Hugging Face token is missing. Add HUGGINGFACE_API_KEY to your .env file to enable image generation.",
-          },
-          { status: 500 },
-        );
-      }
-
-      const hfResult = await generateWithHuggingFace(prompt, hfKey);
-      if (!hfResult) {
-        return NextResponse.json(
-          {
-            error:
-              "All configured Hugging Face image models failed for this request.",
-          },
-          { status: 503 },
-        );
-      }
-
-      selectedModel = hfResult.model;
-      secureUrl = await uploadToCloudinary(hfResult.buffer, uid);
-
-      const quota = await consumeDailyQuota(uid, "generate-image");
-      quotaRemaining = quota.remaining;
-
-      await recordAiUsageEvent({
-        uid,
-        endpoint: "generate-image",
-        success: true,
-        inputChars: prompt.length,
-        model: selectedModel,
-        metadata: {
-          quotaRemaining,
+    } else if (cacheResult.pending) {
+      return NextResponse.json(
+        {
+          status: "processing",
+          message:
+            "This image is currently being generated. Please check back in a few seconds.",
+          retry_after: 5,
         },
-      });
+        { status: 202 },
+      );
+    } else {
+      // It's a MISS and we've reserved the cache record as "pending"
+      let quotaConsumed = false;
+      try {
+        const quota = await consumeDailyQuota(uid, "generate-image");
+        quotaRemaining = quota.remaining;
+        quotaConsumed = true;
 
-      await cacheRef.set({
-        prompt,
-        aspectRatio,
-        style,
-        promptHash,
-        secureUrl,
-        providerModel: selectedModel,
-        createdAt: FieldValue.serverTimestamp(),
-      });
+        const hfKey = getHuggingFaceToken();
+        if (!hfKey) {
+          throw new Error("Hugging Face token is missing.");
+        }
+
+        const hfResult = await generateWithHuggingFace(prompt, hfKey);
+        if (!hfResult) {
+          throw new Error("All configured Hugging Face image models failed.");
+        }
+
+        selectedModel = hfResult.model;
+        secureUrl = await uploadToCloudinary(hfResult.buffer, uid);
+
+        // Finalize transaction
+        await cacheRef.set(
+          {
+            status: "completed",
+            secureUrl,
+            providerModel: selectedModel,
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
+
+        await recordAiUsageEvent({
+          uid,
+          endpoint: "generate-image",
+          success: true,
+          inputChars: prompt.length,
+          model: selectedModel,
+          metadata: { quotaRemaining },
+        });
+      } catch (err: any) {
+        console.error("[generate-image] Generation failed:", err);
+
+        // Rollback quota
+        if (quotaConsumed) {
+          await refundDailyQuota(uid, "generate-image");
+        }
+
+        // Set cache to failed
+        await cacheRef.set(
+          {
+            status: "failed",
+            error: err.message || "Unknown error",
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
+
+        throw err; // Re-throw to be caught by global catch block
+      }
     }
 
     if (idempotencyKey) {
@@ -320,6 +385,17 @@ export async function POST(req: Request) {
             errorType: error?.name || "SecurityError",
           },
         });
+      }
+
+      if (idempotencyKey) {
+        await db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`).set(
+          {
+            status: "failed",
+            error: error?.message,
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
       }
 
       return securityError;

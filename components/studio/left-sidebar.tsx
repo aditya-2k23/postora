@@ -296,15 +296,20 @@ export function LeftSidebar() {
     pId: string,
     regenerateNonce?: string,
   ) => {
+    const sanitize = (s: string) => s.replace(/[^A-Za-z0-9_-]/g, "_");
+
     for (let i = 0; i < cardsToProcess.length; i++) {
       const c = cardsToProcess[i];
       try {
+        const rawKey = `img-${sanitize(c.id)}-${sanitize(pId)}-${sanitize(ratio)}-${sanitize(style)}${regenerateNonce ? `-${sanitize(regenerateNonce)}` : ""}`;
+        const safeIdempotencyKey = rawKey.slice(0, 64);
+
         const res = await fetch("/api/generate-image", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${authToken}`,
-            "x-idempotency-key": `img-${c.id}-${pId}-${ratio}-${style}${regenerateNonce ? `-${regenerateNonce}` : ""}`,
+            "x-idempotency-key": safeIdempotencyKey,
           },
           body: JSON.stringify({
             prompt: c.imagePrompt,
@@ -314,8 +319,19 @@ export function LeftSidebar() {
             cardId: c.id,
           }),
         });
+
         const data = await res.json();
-        if (res.ok && data.imageUrl) {
+        if (!res.ok) {
+          const errorMsg = data.error || `Error ${res.status}: ${res.statusText}`;
+          console.error(`[Image ${i + 1}] Generation failed:`, errorMsg);
+          // Only toast first failure to avoid spamming 10+ toasts
+          if (i === 0) {
+            toast.error(`Image generation partially failed: ${errorMsg}`);
+          }
+          continue;
+        }
+
+        if (data.imageUrl) {
           useStudioStore
             .getState()
             .updateCard(c.id, { imageUrl: data.imageUrl });
@@ -323,7 +339,7 @@ export function LeftSidebar() {
             useStudioStore.getState().setQuotaRemaining(data.quotaRemaining);
           }
         }
-      } catch (e) {
+      } catch (e: any) {
         console.error(`[Image ${i + 1}/${cardsToProcess.length}] failed:`, e);
       }
 
@@ -393,17 +409,19 @@ export function LeftSidebar() {
       return;
     }
 
-    addAssistantMessage({ role: "user", text });
-    setInputValue("");
     setIsAssistantThinking(true);
 
     try {
-      // Build history for multi-turn
+      // Build history for multi-turn (exclude the current message which is sent as 'message')
       const currentHistory = useStudioStore.getState().assistantHistory;
       const historyForApi = currentHistory.map((m) => ({
         role: m.role,
         text: m.text,
       }));
+
+      // Add to store for UI only after capturing history for API
+      addAssistantMessage({ role: "user", text });
+      setInputValue("");
 
       const res = await fetch("/api/assistant-chat", {
         method: "POST",

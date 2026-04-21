@@ -221,6 +221,7 @@ type CanvasState = {
   setStageRef: (slideId: string, stage: Konva.Stage | null) => void;
   startTextEditing: (elementId: string, value: string) => void;
   stopTextEditing: () => void;
+  reset: () => void;
 };
 
 export const useCanvasStore = create<CanvasState>()(
@@ -813,6 +814,17 @@ export const useCanvasStore = create<CanvasState>()(
       startTextEditing: (elementId, value) =>
         set({ textEditing: { elementId, value } }),
       stopTextEditing: () => set({ textEditing: null }),
+      reset: () =>
+        set({
+          slidesByCardId: {},
+          currentSlideId: null,
+          selectedElementIds: [],
+          activeTool: "select",
+          clipboard: null,
+          historyPast: [],
+          historyFuture: [],
+          textEditing: null,
+        }),
     }),
     {
       name: "studio-canvas-storage",

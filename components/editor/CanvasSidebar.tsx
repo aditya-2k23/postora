@@ -335,6 +335,7 @@ export function CanvasSidebar({
               value={selected.fill}
               onChange={(evt) => applyStyleUpdate({ fill: evt.target.value })}
               className="h-8 rounded-md border border-border bg-background"
+              aria-label="Text color"
             />
             <select
               value={selected.align ?? "left"}
@@ -405,6 +406,7 @@ export function CanvasSidebar({
                   opacity: Number(evt.target.value),
                 })
               }
+              aria-label="Image opacity"
             />
             <input
               type="range"
@@ -417,6 +419,7 @@ export function CanvasSidebar({
                   cornerRadius: Number(evt.target.value),
                 })
               }
+              aria-label="Corner radius"
             />
           </div>
           <div className="grid grid-cols-2 gap-2">

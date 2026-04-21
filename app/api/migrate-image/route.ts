@@ -109,18 +109,25 @@ export async function POST(req: Request) {
 
     const secureUrl = await uploadToCloudinary(imageBase64, uid);
 
-    // 2. Consume Quota on success
-    await consumeDailyQuota(uid, "migrate-image");
+    let quotaRemaining: number | null = null;
+    try {
+      const quota = await consumeDailyQuota(uid, "migrate-image");
+      quotaRemaining = quota.remaining;
 
-    // 3. Record Event
-    await recordAiUsageEvent({
-      uid,
-      endpoint: "migrate-image",
-      success: true,
-      metadata: { projectId, cardId, length: imageBase64.length },
+      await recordAiUsageEvent({
+        uid,
+        endpoint: "migrate-image",
+        success: true,
+        metadata: { projectId, cardId, length: imageBase64.length },
+      });
+    } catch (postError) {
+      console.error("[migrate-image] Post-processing error:", postError);
+    }
+
+    return NextResponse.json({
+      imageUrl: secureUrl,
+      quotaRemaining,
     });
-
-    return NextResponse.json({ imageUrl: secureUrl });
   } catch (error: any) {
     const authError = toApiAuthErrorResponse(error);
     if (authError) return authError;

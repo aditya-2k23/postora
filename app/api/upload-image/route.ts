@@ -22,9 +22,10 @@ cloudinary.config({
 const MAX_UPLOAD_SIZE = 6_000_000;
 
 export async function POST(req: Request) {
+  let uid = "";
   try {
     const decodedToken = await requireAuthenticatedUser(req);
-    const uid = decodedToken.uid;
+    uid = decodedToken.uid;
 
     enforceIpRateLimit(req, "upload-image");
     await assertDailyQuotaAvailable(uid, "upload-image");
@@ -39,8 +40,6 @@ export async function POST(req: Request) {
       throw new ValidationError("Image is too large.", 413);
     }
 
-    await consumeDailyQuota(uid, "upload-image");
-
     const uploadResult: any = await new Promise((resolve, reject) => {
       cloudinary.uploader.upload(
         imageBase64,
@@ -52,15 +51,40 @@ export async function POST(req: Request) {
       );
     });
 
-    await recordAiUsageEvent({
-      uid,
-      endpoint: "upload-image",
-      success: true,
-      model: "cloudinary",
-    });
+    let quotaRemaining: number | null = null;
+    try {
+      const quota = await consumeDailyQuota(uid, "upload-image");
+      quotaRemaining = quota.remaining;
 
-    return NextResponse.json({ imageUrl: uploadResult.secure_url });
+      await recordAiUsageEvent({
+        uid,
+        endpoint: "upload-image",
+        success: true,
+        model: "cloudinary",
+      });
+    } catch (postError) {
+      console.error("[upload-image] Post-processing error:", postError);
+    }
+
+    return NextResponse.json({
+      imageUrl: uploadResult.secure_url,
+      quotaRemaining,
+    });
   } catch (error: any) {
+    if (uid) {
+      try {
+        await recordAiUsageEvent({
+          uid,
+          endpoint: "upload-image",
+          success: false,
+          model: "cloudinary",
+          error: error?.message || "Unknown upload error",
+        });
+      } catch (telemetryError) {
+        console.error("[upload-image] Telemetry failed:", telemetryError);
+      }
+    }
+
     const authError = toApiAuthErrorResponse(error);
     if (authError) return authError;
 
@@ -69,7 +93,7 @@ export async function POST(req: Request) {
 
     console.error("Upload Error:", error);
     return NextResponse.json(
-      { error: "Failed to upload image" },
+      { error: error?.message || "Failed to upload image" },
       { status: 500 },
     );
   }

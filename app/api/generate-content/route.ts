@@ -203,11 +203,29 @@ export async function POST(req: Request) {
     const db = getFirebaseAdminDb();
     if (idempotencyKey) {
       const idKeyRef = db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`);
+      const IDEMPOTENCY_STALE_MS = 120_000; // 2 minutes
+
       const idempotencyResult = await db.runTransaction(async (transaction) => {
         const idSnap = await transaction.get(idKeyRef);
         if (idSnap.exists) {
-          return { exists: true, data: idSnap.data() };
+          const data = idSnap.data();
+          const status = data?.status;
+          const createdAt = data?.createdAt?.toMillis?.() || 0;
+          const now = Date.now();
+          const isStale =
+            status === "pending" && now - createdAt > IDEMPOTENCY_STALE_MS;
+
+          // If completed, return it.
+          // If pending and NOT stale, return exists: true (blocked).
+          // If failed OR stale, we allow overwriting (return exists: false).
+          if (status === "completed") {
+            return { exists: true, data };
+          }
+          if (status === "pending" && !isStale) {
+            return { exists: true, data };
+          }
         }
+
         transaction.set(idKeyRef, {
           status: "pending",
           createdAt: FieldValue.serverTimestamp(),
@@ -224,14 +242,15 @@ export async function POST(req: Request) {
             idempotent: true,
           });
         }
+
+        // It was pending and not stale
         return NextResponse.json(
           {
-            error:
-              idData?.status === "pending"
-                ? "A request with this idempotency key is already in progress."
-                : "A request with this idempotency key already failed. Please try a new key.",
+            status: "processing",
+            message: "A request with this key is already in progress. Please wait.",
+            retry_after: 5,
           },
-          { status: idData?.status === "pending" ? 409 : 400 },
+          { status: 202 },
         );
       }
     }
@@ -241,6 +260,16 @@ export async function POST(req: Request) {
     const key = getGeminiToken();
 
     if (!key) {
+      if (idempotencyKey) {
+        await db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`).set(
+          {
+            status: "failed",
+            error: "Gemini API key is not configured.",
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
+      }
       return NextResponse.json(
         {
           error:
@@ -499,8 +528,9 @@ export async function POST(req: Request) {
     `.trim();
 
     let lastError: any = null;
+    let finalCards: any[] | null = null;
 
-    for (const model of GEMINI_TEXT_MODELS) {
+    outer: for (const model of GEMINI_TEXT_MODELS) {
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
           selectedModel = model;
@@ -525,35 +555,8 @@ export async function POST(req: Request) {
             throw new Error("Generator returned invalid cards format");
           }
 
-          const quota = await consumeDailyQuota(uid, "generate-content");
-
-          await recordAiUsageEvent({
-            uid,
-            endpoint: "generate-content",
-            success: true,
-            inputChars: prompt.length,
-            outputChars: JSON.stringify(cards).length,
-            model,
-            metadata: {
-              numCards,
-              platform,
-              quotaRemaining: quota.remaining,
-            },
-          });
-
-          if (idempotencyKey) {
-            await db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`).set(
-              {
-                status: "completed",
-                cards,
-                quotaRemaining: quota.remaining,
-                updatedAt: FieldValue.serverTimestamp(),
-              },
-              { merge: true },
-            );
-          }
-
-          return NextResponse.json({ cards, quotaRemaining: quota.remaining });
+          finalCards = cards;
+          break outer;
         } catch (err: any) {
           lastError = err;
           const status = err?.status ?? err?.response?.status;
@@ -570,18 +573,74 @@ export async function POST(req: Request) {
             `[generate-content] ${model} failed (attempt ${attempt + 1}):`,
             err.message ?? err,
           );
-          break; // try next model
+          break;
         }
       }
     }
 
+    if (finalCards) {
+      try {
+        const quota = await consumeDailyQuota(uid, "generate-content");
+
+        await recordAiUsageEvent({
+          uid,
+          endpoint: "generate-content",
+          success: true,
+          inputChars: prompt.length,
+          outputChars: JSON.stringify(finalCards).length,
+          model: selectedModel,
+          metadata: {
+            numCards,
+            platform,
+            quotaRemaining: quota.remaining,
+          },
+        });
+
+        if (idempotencyKey) {
+          const db = getFirebaseAdminDb();
+          await db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`).set(
+            {
+              status: "completed",
+              cards: finalCards,
+              quotaRemaining: quota.remaining,
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+          );
+        }
+
+        return NextResponse.json({
+          cards: finalCards,
+          quotaRemaining: quota.remaining,
+        });
+      } catch (postError: any) {
+        console.error("[generate-content] Post-processing error:", postError);
+        return NextResponse.json({
+          cards: finalCards,
+          quotaRemaining: null,
+        });
+      }
+    }
+
     // All models exhausted
+    const errorMsg =
+      lastError?.message ||
+      "Content generation failed across all models. Please try again in a minute.";
+
+    if (idempotencyKey) {
+      const db = getFirebaseAdminDb();
+      await db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`).set(
+        {
+          status: "failed",
+          error: errorMsg,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+    }
+
     return NextResponse.json(
-      {
-        error:
-          lastError?.message ||
-          "Content generation failed across all models. Please try again in a minute.",
-      },
+      { error: errorMsg },
       { status: 503 },
     );
   } catch (error: any) {

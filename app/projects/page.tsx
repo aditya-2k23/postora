@@ -29,29 +29,43 @@ export default function ProjectsPage() {
 
   const loadProjectToStudio = useCallback(
     (projectData: any) => {
+      // 1. Reset state to baseline to avoid leftover state from previous sessions
+      useStudioStore.getState().reset();
+      useCanvasStore.getState().reset();
+
+      // 2. Apply project data
       setProjectId(projectData.id);
-      setPrompt(projectData.prompt);
+      setPrompt(projectData.prompt || "");
       setTone(projectData.tone || "Professional");
-      setPlatform(projectData.platform);
-      setAspectRatio(projectData.aspectRatio);
+      setPlatform(projectData.platform || "Instagram Carousel");
+      setAspectRatio(projectData.aspectRatio || "4:5");
       setNumCards(projectData.numCards || projectData.cards?.length || 5);
-      if (projectData.themeSettings) updateTheme(projectData.themeSettings);
-      if (projectData.cards) setCards(projectData.cards);
+
+      if (projectData.themeSettings) {
+        updateTheme(projectData.themeSettings);
+      }
+
+      if (projectData.cards) {
+        setCards(projectData.cards);
+      }
+
       const preferredSlideId =
         projectData.canvas?.currentSlideId ??
         projectData.cards?.[0]?.id ??
         null;
+
       if (preferredSlideId) {
         setActiveCardId(preferredSlideId);
       }
 
       const canvas = projectData.canvas;
       useCanvasStore.setState((state) => ({
-        slidesByCardId: canvas?.slidesByCardId ?? state.slidesByCardId,
+        ...state,
+        slidesByCardId: canvas?.slidesByCardId ?? {},
         currentSlideId: preferredSlideId,
-        activeTool: canvas?.activeTool ?? state.activeTool,
-        gridEnabled: canvas?.gridEnabled ?? state.gridEnabled,
-        rulerEnabled: canvas?.rulerEnabled ?? state.rulerEnabled,
+        activeTool: (canvas?.activeTool as any) ?? "select",
+        gridEnabled: !!canvas?.gridEnabled,
+        rulerEnabled: !!canvas?.rulerEnabled,
       }));
 
       router.push("/studio");
@@ -69,6 +83,12 @@ export default function ProjectsPage() {
       updateTheme,
     ],
   );
+  
+  const startNewProject = useCallback(() => {
+    useStudioStore.getState().reset();
+    useCanvasStore.getState().reset();
+    router.push("/studio");
+  }, [router]);
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -76,7 +96,7 @@ export default function ProjectsPage() {
       try {
         const q = query(collection(db, `users/${user.uid}/projects`));
         const snap = await getDocs(q);
-        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
+        const data = snap.docs.map((d) => ({ ...d.data(), id: d.id }) as any);
         data.sort(
           (a, b) =>
             (b.updatedAt?.toMillis ? b.updatedAt.toMillis() : 0) -
@@ -115,10 +135,7 @@ export default function ProjectsPage() {
             </p>
           </div>
           <Button
-            onClick={() => {
-              useStudioStore.getState().reset();
-              router.push("/studio");
-            }}
+            onClick={startNewProject}
             className="bg-blue-600 hover:bg-blue-700"
           >
             <Plus className="w-4 h-4 mr-2" /> New Project
@@ -134,15 +151,19 @@ export default function ProjectsPage() {
             <p className="text-gray-500 mb-6">
               Create your first carousel or post to see it here.
             </p>
-            <Button onClick={() => router.push("/studio")}>Create Now</Button>
+            <Button
+              onClick={startNewProject}
+            >
+              Create Now
+            </Button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {projects.map((p) => (
-              <div
+              <button
                 key={p.id}
                 onClick={() => loadProjectToStudio(p)}
-                className="group bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-gray-100 dark:border-zinc-800 shadow-sm hover:shadow-md transition-all cursor-pointer relative overflow-hidden"
+                className="group w-full text-left bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-gray-100 dark:border-zinc-800 shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-all cursor-pointer relative overflow-hidden"
               >
                 <div className="flex justify-between items-start mb-4">
                   <div className="bg-gray-100 dark:bg-zinc-800 text-xs px-2 py-1 rounded-md font-medium text-gray-700 dark:text-gray-300">
@@ -164,7 +185,7 @@ export default function ProjectsPage() {
                   <Settings2 className="w-4 h-4 mr-1.5" />
                   {p.cards?.length || 0} cards • Aspect: {p.aspectRatio}
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}
