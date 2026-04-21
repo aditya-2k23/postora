@@ -82,13 +82,14 @@ export function KonvaTransformer({
           }
 
           if (element.shape === "circle") {
+            const newRadius = Math.max(
+              8,
+              (element.radius ?? 40) * Math.max(scaleX, scaleY),
+            );
             onTransformEnd(element.id, {
-              x: node.x() - (element.radius ?? 40) * scaleX,
-              y: node.y() - (element.radius ?? 40) * scaleY,
-              radius: Math.max(
-                8,
-                (element.radius ?? 40) * Math.max(scaleX, scaleY),
-              ),
+              x: node.x() - newRadius,
+              y: node.y() - newRadius,
+              radius: newRadius,
               rotation: node.rotation(),
             });
             return;

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type Konva from "konva";
 import { ASPECT_RATIO_DIMENSIONS, type AspectRatio } from "@/types/canvas";
+import { useShallow } from "zustand/shallow";
 import { useCanvasStore } from "@/store/useCanvasStore";
 import { useStudioStore } from "@/store/useStudioStore";
 import { CanvasToolbar } from "@/components/editor/CanvasToolbar";
@@ -23,7 +24,15 @@ const isTypingTarget = (target: EventTarget | null) => {
 };
 
 export function CanvasEditor() {
-  const { cards, activeCardId, aspectRatio, themeSettings } = useStudioStore();
+  const { cards, activeCardId, aspectRatio, themeSettings } = useStudioStore(
+    useShallow((s) => ({
+      cards: s.cards,
+      activeCardId: s.activeCardId,
+      aspectRatio: s.aspectRatio,
+      themeSettings: s.themeSettings,
+    })),
+  );
+
   const {
     slidesByCardId,
     currentSlideId,
@@ -35,6 +44,22 @@ export function CanvasEditor() {
     gridEnabled,
     rulerEnabled,
     textEditing,
+  } = useCanvasStore(
+    useShallow((s) => ({
+      slidesByCardId: s.slidesByCardId,
+      currentSlideId: s.currentSlideId,
+      selectedElementIds: s.selectedElementIds,
+      activeTool: s.activeTool,
+      clipboard: s.clipboard,
+      historyPast: s.historyPast,
+      historyFuture: s.historyFuture,
+      gridEnabled: s.gridEnabled,
+      rulerEnabled: s.rulerEnabled,
+      textEditing: s.textEditing,
+    })),
+  );
+
+  const {
     ensureSlidesFromCards,
     syncCardContent,
     syncCardImage,
@@ -60,7 +85,7 @@ export function CanvasEditor() {
     setStageRef,
     startTextEditing,
     stopTextEditing,
-  } = useCanvasStore();
+  } = useCanvasStore.getState();
 
   const [stage, setStage] = useState<Konva.Stage | null>(null);
   const slideId = activeCardId ?? currentSlideId;

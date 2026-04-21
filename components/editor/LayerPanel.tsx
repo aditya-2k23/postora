@@ -30,61 +30,74 @@ export function LayerPanel({
       </p>
       <div className="max-h-56 overflow-y-auto space-y-1 pr-1">
         {layers.map(({ el, index }) => {
-          const actualIndex = elements.length - 1 - index;
+          const actualIndex = index;
           const isSelected = selectedIds.includes(el.id);
           return (
-            <button
+            <div
               key={el.id}
-              onClick={() => onSelect(el.id)}
               className={cn(
-                "w-full text-left rounded-md border px-2 py-1.5 text-[11px] flex items-center justify-between gap-2 transition-colors",
+                "w-full rounded-md border px-2 py-1.5 text-[11px] flex items-center justify-between gap-2 transition-colors",
                 isSelected
                   ? "border-primary/50 bg-primary/10 text-foreground"
                   : "border-border bg-muted/30 text-muted-foreground hover:text-foreground",
               )}
             >
-              <span className="truncate">
+              <button
+                type="button"
+                onClick={() => onSelect(el.id)}
+                className="flex-1 text-left truncate hover:underline outline-none focus-visible:underline"
+              >
                 {el.type === "shape" ? `${el.type}:${el.shape}` : el.type}
-              </span>
-              <span className="flex items-center gap-1">
-                <span
+              </button>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  aria-label={el.hidden ? "Show layer" : "Hide layer"}
                   onClick={(evt) => {
                     evt.stopPropagation();
                     onToggleVisibility(el.id, !el.hidden);
                   }}
-                  className="inline-flex h-5 w-5 items-center justify-center rounded hover:bg-muted"
+                  className="inline-flex h-5 w-5 items-center justify-center rounded hover:bg-muted focus-visible:ring-1 focus-visible:ring-primary outline-none"
                 >
                   {el.hidden ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                </span>
-                <span
+                </button>
+                <button
+                  type="button"
+                  aria-label={el.locked ? "Unlock layer" : "Lock layer"}
                   onClick={(evt) => {
                     evt.stopPropagation();
                     onToggleLock(el.id, !el.locked);
                   }}
-                  className="inline-flex h-5 w-5 items-center justify-center rounded hover:bg-muted"
+                  className="inline-flex h-5 w-5 items-center justify-center rounded hover:bg-muted focus-visible:ring-1 focus-visible:ring-primary outline-none"
                 >
                   {el.locked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-                </span>
-                <span
+                </button>
+                <button
+                  type="button"
+                  aria-label="Move layer up"
+                  disabled={actualIndex === elements.length - 1}
                   onClick={(evt) => {
                     evt.stopPropagation();
-                    onReorder(actualIndex, Math.min(elements.length - 1, actualIndex + 1));
+                    onReorder(actualIndex, actualIndex + 1);
                   }}
-                  className="inline-flex h-5 w-5 items-center justify-center rounded hover:bg-muted"
+                  className="inline-flex h-5 w-5 items-center justify-center rounded hover:bg-muted disabled:opacity-30 disabled:hover:bg-transparent focus-visible:ring-1 focus-visible:ring-primary outline-none"
                 >
                   <ArrowUp className="w-3 h-3" />
-                </span>
-                <span
+                </button>
+                <button
+                  type="button"
+                  aria-label="Move layer down"
+                  disabled={actualIndex === 0}
                   onClick={(evt) => {
                     evt.stopPropagation();
-                    onReorder(actualIndex, Math.max(0, actualIndex - 1));
+                    onReorder(actualIndex, actualIndex - 1);
                   }}
-                  className="inline-flex h-5 w-5 items-center justify-center rounded hover:bg-muted"
+                  className="inline-flex h-5 w-5 items-center justify-center rounded hover:bg-muted disabled:opacity-30 disabled:hover:bg-transparent focus-visible:ring-1 focus-visible:ring-primary outline-none"
                 >
                   <ArrowDown className="w-3 h-3" />
-                </span>
-              </span>
-            </button>
+                </button>
+              </div>
+            </div>
           );
         })}
       </div>

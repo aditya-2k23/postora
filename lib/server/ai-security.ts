@@ -6,12 +6,14 @@ import { getFirebaseAdminDb } from "@/lib/server/firebase-admin";
 export type AiEndpoint =
   | "generate-content"
   | "assistant-chat"
-  | "generate-image";
+  | "generate-image"
+  | "upload-image";
 
 const COUNTER_FIELD_BY_ENDPOINT: Record<AiEndpoint, string> = {
   "generate-content": "generateContentCount",
   "assistant-chat": "assistantChatCount",
   "generate-image": "generateImageCount",
+  "upload-image": "uploadImageCount",
 };
 
 const parsePositiveInteger = (value: string | undefined, fallback: number) => {
@@ -32,6 +34,10 @@ const DAILY_LIMITS: Record<AiEndpoint, number> = {
     process.env.AI_DAILY_LIMIT_GENERATE_IMAGE,
     40,
   ),
+  "upload-image": parsePositiveInteger(
+    process.env.AI_DAILY_LIMIT_UPLOAD_IMAGE,
+    60,
+  ),
 };
 
 const RATE_LIMITS_PER_MINUTE: Record<AiEndpoint, number> = {
@@ -46,6 +52,10 @@ const RATE_LIMITS_PER_MINUTE: Record<AiEndpoint, number> = {
   "generate-image": parsePositiveInteger(
     process.env.AI_RATE_LIMIT_GENERATE_IMAGE_PER_MINUTE,
     16,
+  ),
+  "upload-image": parsePositiveInteger(
+    process.env.AI_RATE_LIMIT_UPLOAD_IMAGE_PER_MINUTE,
+    30,
   ),
 };
 

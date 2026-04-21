@@ -28,6 +28,7 @@ export function RightSidebar() {
     setElementVisibility,
     setElementLock,
     duplicateSelected,
+    addElement,
   } = useCanvasStore();
 
   const slideId = currentSlideId ?? activeCardId;
@@ -160,6 +161,7 @@ export function RightSidebar() {
             }
 
             updateCard(currentCard.id, { imageUrl: data.imageUrl });
+            useCanvasStore.getState().syncCardImage(currentCard.id, data.imageUrl);
             toast.success("Image regenerated");
           } catch (error: unknown) {
             const message =
@@ -169,17 +171,93 @@ export function RightSidebar() {
             toast.error(message);
           }
         }}
-        onReplaceImage={(file) => {
+        onReplaceImage={async (file) => {
+          const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
+          if (!file.type.startsWith("image/")) {
+            toast.error("Invalid file type. Please upload an image.");
+            return;
+          }
+          if (file.size > MAX_IMAGE_BYTES) {
+            toast.error("Image is too large. Max size is 5MB.");
+            return;
+          }
+
+          const selectedImage = slide.elements.find(
+            (el) => selectedElementIds.includes(el.id) && el.type === "image",
+          );
+          if (!selectedImage) return;
+
           const reader = new FileReader();
-          reader.onload = () => {
-            const selectedImage = slide.elements.find(
-              (el) => selectedElementIds.includes(el.id) && el.type === "image",
-            );
-            if (!selectedImage || typeof reader.result !== "string") return;
-            pushHistory();
-            updateElement(selectedImage.id, { src: reader.result });
+          reader.onload = async () => {
+            if (typeof reader.result !== "string") return;
+            
+            try {
+              const authToken = await requireAiToken();
+              const res = await fetch("/api/upload-image", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${authToken}`,
+                },
+                body: JSON.stringify({ imageBase64: reader.result }),
+              });
+
+              if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || "Upload failed");
+              }
+
+              const { imageUrl } = await res.json();
+              pushHistory();
+              updateElement(selectedImage.id, { src: imageUrl });
+              toast.success("Image updated");
+            } catch (error: any) {
+              toast.error(error.message || "Failed to upload image");
+            }
           };
           reader.readAsDataURL(file);
+        }}
+        onAddElement={(type) => {
+          pushHistory();
+          const id = crypto.randomUUID();
+          
+          if (type === "text") {
+            addElement({
+              id,
+              type: "text",
+              text: "New Text",
+              x: 100,
+              y: 100,
+              fontSize: 48,
+              fontFamily: "Inter",
+              fill: "#000000",
+              align: "left",
+            });
+          } else if (type === "shape") {
+            addElement({
+              id,
+              type: "shape",
+              shape: "rect",
+              x: 150,
+              y: 150,
+              width: 150,
+              height: 150,
+              fill: "#3B82F6", // Default Blue
+              opacity: 0.5,
+            });
+          } else if (type === "image") {
+            addElement({
+              id,
+              type: "image",
+              src: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop",
+              x: 100,
+              y: 100,
+              width: 300,
+              height: 300,
+              opacity: 1,
+              cornerRadius: 0,
+            });
+          }
         }}
       />
     </motion.div>

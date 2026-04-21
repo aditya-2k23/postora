@@ -45,19 +45,14 @@ export default function ProjectsPage() {
         setActiveCardId(preferredSlideId);
       }
 
-      if (projectData.canvas) {
-        useCanvasStore.setState((state) => ({
-          slidesByCardId:
-            projectData.canvas.slidesByCardId ?? state.slidesByCardId,
-          currentSlideId:
-            projectData.canvas.currentSlideId ??
-            projectData.cards?.[0]?.id ??
-            null,
-          activeTool: projectData.canvas.activeTool ?? state.activeTool,
-          gridEnabled: Boolean(projectData.canvas.gridEnabled),
-          rulerEnabled: Boolean(projectData.canvas.rulerEnabled),
-        }));
-      }
+      const canvas = projectData.canvas;
+      useCanvasStore.setState((state) => ({
+        slidesByCardId: canvas?.slidesByCardId ?? state.slidesByCardId,
+        currentSlideId: preferredSlideId,
+        activeTool: canvas?.activeTool ?? state.activeTool,
+        gridEnabled: canvas?.gridEnabled ?? state.gridEnabled,
+        rulerEnabled: canvas?.rulerEnabled ?? state.rulerEnabled,
+      }));
 
       router.push("/studio");
     },
@@ -81,7 +76,7 @@ export default function ProjectsPage() {
       try {
         const q = query(collection(db, `users/${user.uid}/projects`));
         const snap = await getDocs(q);
-        const data = snap.docs.map((d) => ({ ...d.data() }));
+        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
         data.sort(
           (a, b) =>
             (b.updatedAt?.toMillis ? b.updatedAt.toMillis() : 0) -

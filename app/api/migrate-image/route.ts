@@ -43,11 +43,26 @@ function validatePayload(payload: unknown) {
   }
   const raw = payload as Record<string, unknown>;
   const imageBase64 = raw.imageBase64;
-  if (
-    typeof imageBase64 !== "string" ||
-    !imageBase64.startsWith("data:image/")
-  ) {
-    throw new ValidationError("Valid imageBase64 data URL is required.");
+  if (typeof imageBase64 !== "string") {
+    throw new ValidationError("imageBase64 must be a string.");
+  }
+
+  // Strict validation for raster base64 images only
+  const allowedPrefixes = [
+    "data:image/png;base64,",
+    "data:image/jpeg;base64,",
+    "data:image/webp;base64,",
+    "data:image/gif;base64,",
+  ];
+
+  const hasValidPrefix = allowedPrefixes.some((p) =>
+    imageBase64.startsWith(p),
+  );
+
+  if (!hasValidPrefix) {
+    throw new ValidationError(
+      "Direct base64 raster image data (PNG, JPEG, WEBP, or GIF) is required.",
+    );
   }
 
   if (imageBase64.length > MAX_MIGRATION_DATA_URL_CHARS) {

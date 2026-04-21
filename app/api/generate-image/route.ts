@@ -145,7 +145,18 @@ export async function POST(req: Request) {
   let promptLength = 0;
   let selectedModel = "";
   let ipHash = "";
-  let idempotencyKey = req.headers.get("x-idempotency-key");
+  let rawIdempotencyKey = req.headers.get("x-idempotency-key");
+  let idempotencyKey: string | null = null;
+
+  if (rawIdempotencyKey) {
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(rawIdempotencyKey)) {
+      return NextResponse.json(
+        { error: "Invalid idempotency key format." },
+        { status: 400 },
+      );
+    }
+    idempotencyKey = rawIdempotencyKey;
+  }
 
   try {
     const decodedToken = await requireAuthenticatedUser(req);
@@ -158,31 +169,37 @@ export async function POST(req: Request) {
 
     if (idempotencyKey) {
       const idKeyRef = db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`);
-      const idSnap = await idKeyRef.get();
-      if (idSnap.exists) {
-        const idData = idSnap.data();
+      const idempotencyResult = await db.runTransaction(async (transaction) => {
+        const idSnap = await transaction.get(idKeyRef);
+        if (idSnap.exists) {
+          return { exists: true, data: idSnap.data() };
+        }
+        transaction.set(idKeyRef, {
+          status: "pending",
+          createdAt: FieldValue.serverTimestamp(),
+        });
+        return { exists: false };
+      });
+
+      if (idempotencyResult.exists) {
+        const idData = idempotencyResult.data;
         if (idData?.status === "completed" && idData?.secureUrl) {
           return NextResponse.json({
             imageUrl: idData.secureUrl,
             quotaRemaining: idData.quotaRemaining || 0,
             idempotent: true,
           });
-        } else if (idData?.status === "pending") {
-          return NextResponse.json(
-            {
-              error:
-                "A request with this idempotency key is already in progress. Please wait.",
-            },
-            { status: 409 },
-          );
         }
+        return NextResponse.json(
+          {
+            error:
+              idData?.status === "pending"
+                ? "A request with this idempotency key is already in progress."
+                : "A request with this idempotency key already failed. Please try a new key.",
+          },
+          { status: idData?.status === "pending" ? 409 : 400 },
+        );
       }
-
-      // Mark as pending
-      await idKeyRef.set({
-        status: "pending",
-        createdAt: FieldValue.serverTimestamp(),
-      });
     }
 
     const { prompt, aspectRatio, style, projectId, cardId } =
@@ -307,6 +324,8 @@ export async function POST(req: Request) {
     const authError = toApiAuthErrorResponse(error);
     if (authError) return authError;
 
+    const db = getFirebaseAdminDb();
+
     const securityError = toAiSecurityErrorResponse(error);
     if (securityError) {
       if (uid) {
@@ -342,8 +361,7 @@ export async function POST(req: Request) {
       });
 
       if (idempotencyKey) {
-        await getFirebaseAdminDb()
-          .doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`)
+        await db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`)
           .set(
             {
               status: "failed",

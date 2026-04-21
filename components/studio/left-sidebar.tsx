@@ -291,6 +291,7 @@ export function LeftSidebar() {
     authToken: string,
     style: string,
     pId: string,
+    regenerateNonce?: string,
   ) => {
     for (let i = 0; i < cardsToProcess.length; i++) {
       const c = cardsToProcess[i];
@@ -300,7 +301,7 @@ export function LeftSidebar() {
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${authToken}`,
-            "x-idempotency-key": `img-${c.id}-${Date.now()}`,
+            "x-idempotency-key": `img-${c.id}-${pId}-${ratio}-${style}${regenerateNonce ? `-${regenerateNonce}` : ""}`,
           },
           body: JSON.stringify({
             prompt: c.imagePrompt,

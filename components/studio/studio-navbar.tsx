@@ -11,7 +11,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Download, ChevronDown, Sun, Moon, Save, LogOut, User as UserIcon } from "lucide-react";
+import {
+  Download,
+  ChevronDown,
+  Sun,
+  Moon,
+  Save,
+  LogOut,
+  User as UserIcon,
+} from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { db, signOut } from "@/lib/firebase";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
@@ -60,48 +68,39 @@ export function StudioNavbar() {
     try {
       const pId = projectId || crypto.randomUUID();
       const projectRef = doc(db, `users/${user.uid}/projects/${pId}`);
-      const canvasState = {
+      const canvasDocRef = doc(db, `users/${user.uid}/projects/${pId}/canvas/state`);
+      
+      const mainPayload = {
+        id: pId,
+        userId: user.uid,
+        prompt,
+        tone,
+        platform,
+        aspectRatio,
+        numCards,
+        themeSettings,
+        cards,
+        updatedAt: serverTimestamp(),
+        ...(projectId ? {} : { createdAt: serverTimestamp() }),
+      };
+
+      const canvasPayload = {
         slidesByCardId,
-        currentSlideId,
+        ...(currentSlideId ? { currentSlideId } : {}),
         activeTool,
         gridEnabled,
         rulerEnabled,
+        updatedAt: serverTimestamp(),
       };
 
+      // Perform both writes
+      await Promise.all([
+        setDoc(projectRef, mainPayload, { merge: true }),
+        setDoc(canvasDocRef, canvasPayload, { merge: true }),
+      ]);
+      
       if (!projectId) {
-        await setDoc(projectRef, {
-          id: pId,
-          userId: user.uid,
-          prompt,
-          tone,
-          platform,
-          aspectRatio,
-          numCards,
-          themeSettings,
-          cards,
-          canvas: canvasState,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
         setProjectId(pId);
-      } else {
-        await setDoc(
-          projectRef,
-          {
-            id: pId,
-            userId: user.uid,
-            prompt,
-            tone,
-            platform,
-            aspectRatio,
-            numCards,
-            themeSettings,
-            cards,
-            canvas: canvasState,
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true },
-        );
       }
 
       toast.success("Project saved securely to cloud!");
@@ -162,6 +161,11 @@ export function StudioNavbar() {
         <Button
           variant="ghost"
           size="icon"
+          aria-label={
+            resolvedTheme === "dark"
+              ? "Switch to light theme"
+              : "Switch to dark theme"
+          }
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
           onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
         >
@@ -178,6 +182,7 @@ export function StudioNavbar() {
         <Button
           variant="ghost"
           size="icon"
+          aria-label="Save project"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
           onClick={handleSaveProject}
         >

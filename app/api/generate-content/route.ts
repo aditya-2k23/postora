@@ -16,12 +16,10 @@ import {
   ValidationError,
 } from "@/lib/server/ai-security";
 
-// ---------------------------------------------------------------------------
-// Model fallback chain – ordered from most recommended to legacy
-// ---------------------------------------------------------------------------
 const GEMINI_TEXT_MODELS = [
-  "gemini-2.5-flash", // recommended general-purpose, best free-tier quota
-  "gemini-2.5-flash-lite", // lighter fallback
+  "gemini-2.0-flash",
+  "gemini-1.5-flash",
+  "gemini-2.0-flash-lite-preview-02-05",
 ];
 
 const cardSchema = {
@@ -169,6 +167,18 @@ function normalizeGeneratedCards(payload: unknown): NormalizedCard[] | null {
   return normalized.length > 0 ? normalized : null;
 }
 
+function getGeminiToken(): string {
+  return (
+    process.env.GEMINI_API_KEY ||
+    process.env.GEMINI_PUBLIC_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
+    ""
+  )
+    .replace(/['"]/g, "")
+    .trim();
+}
+
 export async function POST(req: Request) {
   let uid = "";
   let requestPromptLength = 0;
@@ -176,44 +186,70 @@ export async function POST(req: Request) {
   let requestPlatform = "";
   let selectedModel = "";
   let ipHash = "";
-  let idempotencyKey = req.headers.get("x-idempotency-key");
+  let rawIdempotencyKey = req.headers.get("x-idempotency-key");
+  let idempotencyKey: string | null = null;
 
-    try {
-      const decodedToken = await requireAuthenticatedUser(req);
-      uid = decodedToken.uid;
-      
-      const db = getFirebaseAdminDb();
-      if (idempotencyKey) {
-        const idKeyRef = db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`);
-        const idSnap = await idKeyRef.get();
+  if (rawIdempotencyKey) {
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(rawIdempotencyKey)) {
+      return NextResponse.json(
+        { error: "Invalid idempotency key format." },
+        { status: 400 },
+      );
+    }
+    idempotencyKey = rawIdempotencyKey;
+  }
+
+  try {
+    const decodedToken = await requireAuthenticatedUser(req);
+    uid = decodedToken.uid;
+
+    const db = getFirebaseAdminDb();
+    if (idempotencyKey) {
+      const idKeyRef = db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`);
+      const idempotencyResult = await db.runTransaction(async (transaction) => {
+        const idSnap = await transaction.get(idKeyRef);
         if (idSnap.exists) {
-          const idData = idSnap.data();
-          if (idData?.status === "completed" && idData?.cards) {
-            return NextResponse.json({
-              cards: idData.cards,
-              quotaRemaining: idData.quotaRemaining || 0,
-              idempotent: true
-            });
-          } else if (idData?.status === "pending") {
-            return NextResponse.json(
-              { error: "A request with this idempotency key is already in progress. Please wait." },
-              { status: 409 }
-            );
-          }
+          return { exists: true, data: idSnap.data() };
         }
-        await idKeyRef.set({ status: "pending", createdAt: FieldValue.serverTimestamp() });
-      }
+        transaction.set(idKeyRef, {
+          status: "pending",
+          createdAt: FieldValue.serverTimestamp(),
+        });
+        return { exists: false };
+      });
 
-      enforceIpRateLimit(req, "generate-content");
+      if (idempotencyResult.exists) {
+        const idData = idempotencyResult.data;
+        if (idData?.status === "completed" && idData?.cards) {
+          return NextResponse.json({
+            cards: idData.cards,
+            quotaRemaining: idData.quotaRemaining || 0,
+            idempotent: true,
+          });
+        }
+        return NextResponse.json(
+          {
+            error:
+              idData?.status === "pending"
+                ? "A request with this idempotency key is already in progress."
+                : "A request with this idempotency key already failed. Please try a new key.",
+          },
+          { status: idData?.status === "pending" ? 409 : 400 },
+        );
+      }
+    }
+
+    enforceIpRateLimit(req, "generate-content");
     ipHash = getRequestIpHash(req);
 
-    let key = process.env.GEMINI_API_KEY || "";
-    // Clean up accidental quotes or whitespace from the environment variable
-    key = key.replace(/['"]/g, "").trim();
+    const key = getGeminiToken();
 
     if (!key) {
       return NextResponse.json(
-        { error: "Gemini API key is not configured." },
+        {
+          error:
+            "Gemini API key is not configured. Please add GEMINI_API_KEY or GEMINI_PUBLIC_KEY to your .env file.",
+        },
         { status: 500 },
       );
     }
@@ -511,12 +547,15 @@ export async function POST(req: Request) {
           });
 
           if (idempotencyKey) {
-            await db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`).set({
-              status: "completed",
-              cards,
-              quotaRemaining: quota.remaining,
-              updatedAt: FieldValue.serverTimestamp(),
-            }, { merge: true });
+            await db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`).set(
+              {
+                status: "completed",
+                cards,
+                quotaRemaining: quota.remaining,
+                updatedAt: FieldValue.serverTimestamp(),
+              },
+              { merge: true },
+            );
           }
 
           return NextResponse.json({ cards, quotaRemaining: quota.remaining });
@@ -553,8 +592,7 @@ export async function POST(req: Request) {
   } catch (error: any) {
     const authError = toApiAuthErrorResponse(error);
     if (authError) return authError;
-    
-    const idempotencyKey = req.headers.get("x-idempotency-key");
+
     const db = getFirebaseAdminDb();
 
     const securityError = toAiSecurityErrorResponse(error);
@@ -575,13 +613,16 @@ export async function POST(req: Request) {
           },
         });
       }
-      
+
       if (idempotencyKey) {
-          await db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`).set({
+        await db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`).set(
+          {
             status: "failed",
             error: error?.message,
             updatedAt: FieldValue.serverTimestamp(),
-          }, { merge: true });
+          },
+          { merge: true },
+        );
       }
 
       return securityError;
@@ -602,13 +643,16 @@ export async function POST(req: Request) {
           errorType: error?.name || "UnhandledError",
         },
       });
-      
+
       if (idempotencyKey) {
-          await db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`).set({
+        await db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`).set(
+          {
             status: "failed",
             error: error?.message,
             updatedAt: FieldValue.serverTimestamp(),
-          }, { merge: true });
+          },
+          { merge: true },
+        );
       }
     }
 

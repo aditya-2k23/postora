@@ -199,8 +199,61 @@ export default function StudioPage() {
     backfillImages();
   }, [mounted, user, projectId, cards]);
 
+  const lastCardsSyncedRef = useRef<string>("");
+  const lastCanvasSyncedRef = useRef<string>("");
+  const hasLoadedCanvasRef = useRef<string | null>(null);
+
+  // Initial canvas load for existing projects
+  useEffect(() => {
+    if (!mounted || !user || !projectId || hasLoadedCanvasRef.current === projectId) return;
+    
+    const loadCanvasData = async () => {
+      try {
+        const canvasDocRef = doc(db, `users/${user.uid}/projects/${projectId}/canvas/state`);
+        const { getDoc } = await import("firebase/firestore");
+        const canvasSnap = await getDoc(canvasDocRef);
+        
+        if (canvasSnap.exists()) {
+          const canvas = canvasSnap.data();
+          useCanvasStore.setState({
+            slidesByCardId: canvas.slidesByCardId || {},
+            currentSlideId: canvas.currentSlideId || canvasCurrentSlideId,
+            activeTool: canvas.activeTool || "select",
+            gridEnabled: !!canvas.gridEnabled,
+            rulerEnabled: !!canvas.rulerEnabled,
+          });
+          lastCanvasSyncedRef.current = JSON.stringify({
+            slidesByCardId: canvas.slidesByCardId,
+            currentSlideId: canvas.currentSlideId,
+            activeTool: canvas.activeTool,
+            gridEnabled: canvas.gridEnabled,
+            rulerEnabled: canvas.rulerEnabled,
+          });
+        }
+        hasLoadedCanvasRef.current = projectId;
+      } catch (error) {
+        console.error("Failed to load separate canvas state:", error);
+      }
+    };
+    
+    loadCanvasData();
+  }, [mounted, user, projectId, canvasCurrentSlideId]);
+
+  // Sync 1: Metadata and Cards
   useEffect(() => {
     if (!mounted || !user || !projectId || cards.length === 0) return;
+
+    const currentCardsJson = JSON.stringify({
+      prompt,
+      platform,
+      tone,
+      aspectRatio,
+      themeSettings,
+      cards,
+    });
+
+    if (currentCardsJson === lastCardsSyncedRef.current) return;
+
     const timer = window.setTimeout(async () => {
       try {
         const projectRef = doc(db, `users/${user.uid}/projects/${projectId}`);
@@ -213,44 +266,79 @@ export default function StudioPage() {
           aspectRatio,
           themeSettings,
           cards,
-          canvas: {
-            slidesByCardId: canvasSlides,
-            currentSlideId: canvasCurrentSlideId,
-            activeTool,
-            gridEnabled,
-            rulerEnabled,
-          },
           updatedAt: serverTimestamp(),
         };
 
         try {
           await updateDoc(projectRef, payload);
+          lastCardsSyncedRef.current = currentCardsJson;
         } catch (updateError: any) {
           if (updateError.code === "not-found") {
             await setDoc(projectRef, { ...payload, createdAt: serverTimestamp() });
+            lastCardsSyncedRef.current = currentCardsJson;
           } else {
-            console.error("Auto-sync failed:", updateError);
+            console.error("Metadata sync failed:", updateError);
           }
         }
       } catch (error) {
-        console.error("Critical auto-sync construction failure:", error);
+        console.error("Critical metadata sync failure:", error);
       }
-    }, 1200);
+    }, 1500);
 
     return () => window.clearTimeout(timer);
   }, [
-    aspectRatio,
-    canvasCurrentSlideId,
-    canvasSlides,
-    activeTool,
-    cards,
-    gridEnabled,
-    platform,
-    projectId,
     prompt,
-    rulerEnabled,
-    themeSettings,
+    platform,
     tone,
+    aspectRatio,
+    themeSettings,
+    cards,
+    projectId,
+    user,
+    mounted,
+  ]);
+
+  // Sync 2: Canvas State
+  useEffect(() => {
+    if (!mounted || !user || !projectId || Object.keys(canvasSlides).length === 0) return;
+
+    const currentCanvasJson = JSON.stringify({
+      slidesByCardId: canvasSlides,
+      currentSlideId: canvasCurrentSlideId,
+      activeTool,
+      gridEnabled,
+      rulerEnabled,
+    });
+
+    if (currentCanvasJson === lastCanvasSyncedRef.current) return;
+
+    const timer = window.setTimeout(async () => {
+      try {
+        const canvasDocRef = doc(db, `users/${user.uid}/projects/${projectId}/canvas/state`);
+        const payload = {
+          slidesByCardId: canvasSlides,
+          currentSlideId: canvasCurrentSlideId,
+          activeTool,
+          gridEnabled,
+          rulerEnabled,
+          updatedAt: serverTimestamp(),
+        };
+
+        await setDoc(canvasDocRef, payload, { merge: true });
+        lastCanvasSyncedRef.current = currentCanvasJson;
+      } catch (error) {
+        console.error("Canvas sync failed:", error);
+      }
+    }, 2000); // Slightly longer debounce for heavy canvas data
+
+    return () => window.clearTimeout(timer);
+  }, [
+    canvasSlides,
+    canvasCurrentSlideId,
+    activeTool,
+    gridEnabled,
+    rulerEnabled,
+    projectId,
     user,
     mounted,
   ]);

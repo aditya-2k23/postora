@@ -25,6 +25,7 @@ type Props = {
   onDuplicate: () => void;
   onRegenerateImage: () => void;
   onReplaceImage: (file: File) => void;
+  onAddElement: (type: "text" | "image" | "shape") => void;
 };
 
 const FONT_OPTIONS = ["Inter", "Poppins", "Playfair Display"] as const;
@@ -51,6 +52,7 @@ export function CanvasSidebar({
   onDuplicate,
   onRegenerateImage,
   onReplaceImage,
+  onAddElement,
 }: Props) {
   const selected = slideElements.find((el) => selectedIds[0] === el.id);
   const selectedElements = slideElements.filter((el) =>
@@ -459,10 +461,40 @@ export function CanvasSidebar({
         onToggleLock={onToggleLock}
       />
 
-      <Button variant="outline" size="sm" className="w-full text-[11px]">
-        <Plus className="w-3.5 h-3.5 mr-1" />
-        Add Element
-      </Button>
+      <div className="flex flex-col gap-2 pt-2 border-t border-border/50">
+        <p className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase px-1">
+          Insert
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-[11px] h-9"
+            onClick={() => onAddElement("text")}
+          >
+            <Plus className="w-3.5 h-3.5 mr-1" />
+            Text
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-[11px] h-9"
+            onClick={() => onAddElement("shape")}
+          >
+            <Plus className="w-3.5 h-3.5 mr-1" />
+            Shape
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-[11px] h-9"
+            onClick={() => onAddElement("image")}
+          >
+            <Plus className="w-3.5 h-3.5 mr-1" />
+            Image
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

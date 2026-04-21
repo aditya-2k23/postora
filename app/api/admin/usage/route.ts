@@ -66,7 +66,7 @@ export async function GET(req: Request) {
       events,
     });
   } catch (err: any) {
-    console.error("[admin API] fetch usage error:", err.message);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error("[admin API] fetch usage error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
