@@ -37,8 +37,8 @@ export default function RootLayout({
       <body suppressHydrationWarning className="bg-background text-foreground">
         <ThemeProvider
           attribute="class"
-          defaultTheme="light"
-          enableSystem
+          defaultTheme="dark"
+          enableSystem={false}
           disableTransitionOnChange
         >
           <AuthProvider>
