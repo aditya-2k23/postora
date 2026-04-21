@@ -8,7 +8,6 @@ import {
   assertDailyQuotaAvailable,
   consumeDailyQuota,
   enforceIpRateLimit,
-  getRequestIpHash,
   recordAiUsageEvent,
   toAiSecurityErrorResponse,
   ValidationError,
@@ -280,14 +279,12 @@ export async function POST(req: Request) {
   let historyCount = 0;
   let cardsCount = 0;
   let selectedModel = "";
-  let ipHash = "";
 
   try {
     const decodedToken = await requireAuthenticatedUser(req);
     uid = decodedToken.uid;
 
     enforceIpRateLimit(req, "assistant-chat");
-    ipHash = getRequestIpHash(req);
 
     let key = process.env.GEMINI_API_KEY || "";
     key = key.replace(/['"]/g, "").trim();
@@ -379,7 +376,6 @@ export async function POST(req: Request) {
             inputChars: message.length,
             outputChars: reply.length,
             model,
-            ipHash,
             metadata: {
               historyCount: history.length,
               cardsCount: context.cards.length,
@@ -431,7 +427,6 @@ export async function POST(req: Request) {
           success: false,
           inputChars: messageLength || undefined,
           model: selectedModel || undefined,
-          ipHash: ipHash || undefined,
           error: error?.message,
           metadata: {
             historyCount: historyCount || undefined,
@@ -451,7 +446,6 @@ export async function POST(req: Request) {
         success: false,
         inputChars: messageLength || undefined,
         model: selectedModel || undefined,
-        ipHash: ipHash || undefined,
         error: error?.message,
         metadata: {
           historyCount: historyCount || undefined,

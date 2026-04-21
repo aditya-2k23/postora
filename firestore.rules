@@ -35,8 +35,14 @@ service cloud.firestore {
         && (!('canvas' in data) || (
           data.canvas is map
           && data.canvas.keys().hasOnly(['slidesByCardId', 'currentSlideId', 'activeTool', 'gridEnabled', 'rulerEnabled'])
-          && (!('slidesByCardId' in data.canvas) || data.canvas.slidesByCardId is map)
-          && (!('currentSlideId' in data.canvas) || (data.canvas.currentSlideId is string && data.canvas.currentSlideId.size() <= 128))
+          && (!('slidesByCardId' in data.canvas) || (
+            data.canvas.slidesByCardId is map 
+            && data.canvas.slidesByCardId.size() <= 50
+          ))
+          && (!('currentSlideId' in data.canvas) || (
+            data.canvas.currentSlideId == null || 
+            (data.canvas.currentSlideId is string && data.canvas.currentSlideId.size() <= 128)
+          ))
           && (!('activeTool' in data.canvas) || (data.canvas.activeTool is string && data.canvas.activeTool.size() <= 40))
           && (!('gridEnabled' in data.canvas) || data.canvas.gridEnabled is bool)
           && (!('rulerEnabled' in data.canvas) || data.canvas.rulerEnabled is bool)

@@ -10,7 +10,6 @@ import {
   assertDailyQuotaAvailable,
   consumeDailyQuota,
   enforceIpRateLimit,
-  getRequestIpHash,
   recordAiUsageEvent,
   toAiSecurityErrorResponse,
   ValidationError,
@@ -185,7 +184,6 @@ export async function POST(req: Request) {
   let requestNumCards = 0;
   let requestPlatform = "";
   let selectedModel = "";
-  let ipHash = "";
   let rawIdempotencyKey = req.headers.get("x-idempotency-key");
   let idempotencyKey: string | null = null;
 
@@ -240,7 +238,6 @@ export async function POST(req: Request) {
     }
 
     enforceIpRateLimit(req, "generate-content");
-    ipHash = getRequestIpHash(req);
 
     const key = getGeminiToken();
 
@@ -538,7 +535,6 @@ export async function POST(req: Request) {
             inputChars: prompt.length,
             outputChars: JSON.stringify(cards).length,
             model,
-            ipHash,
             metadata: {
               numCards,
               platform,
@@ -604,7 +600,6 @@ export async function POST(req: Request) {
           success: false,
           inputChars: requestPromptLength || undefined,
           model: selectedModel || undefined,
-          ipHash: ipHash || undefined,
           error: error?.message,
           metadata: {
             numCards: requestNumCards || undefined,
@@ -635,7 +630,6 @@ export async function POST(req: Request) {
         success: false,
         inputChars: requestPromptLength || undefined,
         model: selectedModel || undefined,
-        ipHash: ipHash || undefined,
         error: error?.message,
         metadata: {
           numCards: requestNumCards || undefined,

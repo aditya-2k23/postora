@@ -228,6 +228,7 @@ export function RightSidebar() {
               text: "New Text",
               x: 100,
               y: 100,
+              width: 600,
               fontSize: 48,
               fontFamily: "Inter",
               fill: "#000000",

@@ -35,7 +35,6 @@ import {
   assertDailyQuotaAvailable,
   consumeDailyQuota,
   enforceIpRateLimit,
-  getRequestIpHash,
   QuotaExceededError,
   recordAiUsageEvent,
   toAiSecurityErrorResponse,
@@ -144,7 +143,6 @@ export async function POST(req: Request) {
   let uid = "";
   let promptLength = 0;
   let selectedModel = "";
-  let ipHash = "";
   let rawIdempotencyKey = req.headers.get("x-idempotency-key");
   let idempotencyKey: string | null = null;
 
@@ -163,7 +161,6 @@ export async function POST(req: Request) {
     uid = decodedToken.uid;
 
     enforceIpRateLimit(req, "generate-image");
-    ipHash = getRequestIpHash(req);
 
     const db = getFirebaseAdminDb();
 
@@ -271,7 +268,6 @@ export async function POST(req: Request) {
         success: true,
         inputChars: prompt.length,
         model: selectedModel,
-        ipHash,
         metadata: {
           quotaRemaining,
         },
@@ -335,7 +331,6 @@ export async function POST(req: Request) {
           success: false,
           inputChars: promptLength || undefined,
           model: selectedModel || undefined,
-          ipHash: ipHash || undefined,
           error: error?.message,
           metadata: {
             errorType: error?.name || "SecurityError",
@@ -353,7 +348,6 @@ export async function POST(req: Request) {
         success: false,
         inputChars: promptLength || undefined,
         model: selectedModel || undefined,
-        ipHash: ipHash || undefined,
         error: error?.message,
         metadata: {
           errorType: error?.name || "UnhandledError",
@@ -361,15 +355,14 @@ export async function POST(req: Request) {
       });
 
       if (idempotencyKey) {
-        await db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`)
-          .set(
-            {
-              status: "failed",
-              error: error?.message,
-              updatedAt: FieldValue.serverTimestamp(),
-            },
-            { merge: true },
-          );
+        await db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`).set(
+          {
+            status: "failed",
+            error: error?.message,
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
       }
     }
 

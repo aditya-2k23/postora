@@ -1,4 +1,3 @@
-import { createHash } from "crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
 import { getFirebaseAdminDb } from "@/lib/server/firebase-admin";
@@ -61,7 +60,6 @@ const RATE_LIMITS_PER_MINUTE: Record<AiEndpoint, number> = {
 
 const RATE_WINDOW_MS = 60_000;
 const MAX_RATE_BUCKETS = 3_000;
-const ipHashSalt = process.env.AI_USAGE_IP_HASH_SALT || "local-dev-ip-salt";
 
 type RateBucket = {
   count: number;
@@ -147,11 +145,6 @@ const cleanupRateBuckets = (now: number) => {
     }
   }
 };
-
-const hashValue = (value: string) =>
-  createHash("sha256").update(`${ipHashSalt}:${value}`).digest("hex");
-
-export const getRequestIpHash = (req: Request) => hashValue(readClientIp(req));
 
 export const enforceIpRateLimit = (req: Request, endpoint: AiEndpoint) => {
   const now = Date.now();
@@ -269,7 +262,6 @@ type AiUsageEventParams = {
   inputChars?: number;
   outputChars?: number;
   model?: string;
-  ipHash?: string;
   error?: string;
   metadata?: Record<string, unknown>;
 };
@@ -282,7 +274,6 @@ export const recordAiUsageEvent = async ({
   inputChars,
   outputChars,
   model,
-  ipHash,
   error,
   metadata,
 }: AiUsageEventParams) => {
@@ -301,7 +292,6 @@ export const recordAiUsageEvent = async ({
       inputChars: Number.isFinite(inputChars) ? inputChars : null,
       outputChars: Number.isFinite(outputChars) ? outputChars : null,
       model: model || null,
-      ipHash: ipHash || null,
       error: error ? error.slice(0, 300) : null,
       metadata: safeMetadata || null,
       createdAt: FieldValue.serverTimestamp(),

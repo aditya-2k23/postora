@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
-import { requireAuthenticatedUser, toApiAuthErrorResponse } from "@/lib/server/api-auth";
-import { 
-  enforceIpRateLimit, 
-  toAiSecurityErrorResponse, 
+import {
+  requireAuthenticatedUser,
+  toApiAuthErrorResponse,
+} from "@/lib/server/api-auth";
+import {
+  enforceIpRateLimit,
+  toAiSecurityErrorResponse,
   ValidationError,
   assertDailyQuotaAvailable,
   consumeDailyQuota,
   recordAiUsageEvent,
-  getRequestIpHash
 } from "@/lib/server/ai-security";
 
 cloudinary.config({
@@ -34,7 +36,7 @@ export async function POST(req: Request) {
     }
 
     if (imageBase64.length > MAX_UPLOAD_SIZE) {
-       throw new ValidationError("Image is too large.", 413);
+      throw new ValidationError("Image is too large.", 413);
     }
 
     await consumeDailyQuota(uid, "upload-image");
@@ -46,7 +48,7 @@ export async function POST(req: Request) {
         (error, result) => {
           if (error) reject(error);
           else resolve(result);
-        }
+        },
       );
     });
 
@@ -55,7 +57,6 @@ export async function POST(req: Request) {
       endpoint: "upload-image",
       success: true,
       model: "cloudinary",
-      ipHash: getRequestIpHash(req),
     });
 
     return NextResponse.json({ imageUrl: uploadResult.secure_url });
@@ -69,7 +70,7 @@ export async function POST(req: Request) {
     console.error("Upload Error:", error);
     return NextResponse.json(
       { error: "Failed to upload image" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
