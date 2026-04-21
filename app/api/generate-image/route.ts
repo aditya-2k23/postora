@@ -4,29 +4,6 @@ import { createHash } from "crypto";
 import { v2 as cloudinary } from "cloudinary";
 import { getFirebaseAdminDb } from "@/lib/server/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-
-async function uploadToCloudinary(
-  blobArrayBuffer: ArrayBuffer,
-  uid: string,
-): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const uploadStream = cloudinary.uploader.upload_stream(
-      { folder: `postora_images/${uid}` },
-      (error, result) => {
-        if (error) reject(error);
-        else if (result) resolve(result.secure_url);
-        else reject(new Error("Unknown cloudinary upload error"));
-      },
-    );
-    uploadStream.end(Buffer.from(blobArrayBuffer));
-  });
-}
 import {
   requireAuthenticatedUser,
   toApiAuthErrorResponse,
@@ -42,6 +19,58 @@ import {
   ValidationError,
 } from "@/lib/server/ai-security";
 
+// ─── Cloudinary setup
+(function validateAndConfigureCloudinary() {
+  const missing = (
+    [
+      "CLOUDINARY_CLOUD_NAME",
+      "CLOUDINARY_API_KEY",
+      "CLOUDINARY_API_SECRET",
+    ] as const
+  ).filter((key) => !process.env[key]);
+
+  if (missing.length > 0) {
+    const msg = `[generate-image] Cloudinary misconfiguration — missing env vars: ${missing.join(", ")}. Image uploads will fail.`;
+    console.error(msg);
+    // Throw during module init in production so the server surfaces the problem
+    // immediately rather than hiding it inside the first request.
+    if (process.env.NODE_ENV === "production") throw new Error(msg);
+  }
+
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+  });
+})();
+
+async function uploadToCloudinary(
+  blobArrayBuffer: ArrayBuffer,
+  uid: string,
+): Promise<string> {
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  if (!cloudName || !apiKey || !apiSecret) {
+    throw new Error(
+      "Cloudinary credentials are not configured (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET).",
+    );
+  }
+
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      { folder: `postora_images/${uid}` },
+      (error, result) => {
+        if (error) reject(error);
+        else if (result) resolve(result.secure_url);
+        else reject(new Error("Unknown cloudinary upload error"));
+      },
+    );
+    uploadStream.end(Buffer.from(blobArrayBuffer));
+  });
+}
+
+// ─── Image models ─────────────────────────────────────────────────────────────
 const HUGGING_FACE_IMAGE_MODELS = [
   "black-forest-labs/FLUX.1-schnell",
   "black-forest-labs/FLUX.1-dev",
@@ -139,14 +168,15 @@ async function generateWithHuggingFace(
   return null;
 }
 
-// POST handler
+// ─── POST handler ─────────────────────────────────────────────────────────────
 export async function POST(req: Request) {
   let uid = "";
   let promptLength = 0;
   let selectedModel = "";
-  let rawIdempotencyKey = req.headers.get("x-idempotency-key");
   let idempotencyKey: string | null = null;
+  let idempotencyClaimed = false;
 
+  const rawIdempotencyKey = req.headers.get("x-idempotency-key");
   if (rawIdempotencyKey) {
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(rawIdempotencyKey)) {
       return NextResponse.json(
@@ -193,6 +223,11 @@ export async function POST(req: Request) {
         });
         return { exists: false };
       });
+
+      if (!idempotencyResult.exists) {
+        // We successfully claimed the pending slot
+        idempotencyClaimed = true;
+      }
 
       if (idempotencyResult.exists) {
         const idData = idempotencyResult.data;
@@ -387,7 +422,7 @@ export async function POST(req: Request) {
         });
       }
 
-      if (idempotencyKey) {
+      if (idempotencyKey && idempotencyClaimed) {
         await db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`).set(
           {
             status: "failed",
@@ -414,7 +449,7 @@ export async function POST(req: Request) {
         },
       });
 
-      if (idempotencyKey) {
+      if (idempotencyKey && idempotencyClaimed) {
         await db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`).set(
           {
             status: "failed",

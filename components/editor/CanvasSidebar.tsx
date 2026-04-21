@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { Plus, Replace, WandSparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { SlideElement } from "@/types/canvas";
@@ -55,10 +56,26 @@ export function CanvasSidebar({
   onAddElement,
 }: Props) {
   const selected = slideElements.find((el) => selectedIds[0] === el.id);
+  const selectedText =
+    selected?.type === "text" ? (selected as any) : null;
+
+  // Local state for color inputs to prevent flooding
+  const [localCanvasBg, setLocalCanvasBg] = useState(backgroundColor);
+  const [localFill, setLocalFill] = useState(selectedText?.fill || "#000000");
+
+  useEffect(() => {
+    setLocalCanvasBg(backgroundColor);
+  }, [backgroundColor]);
+
+  useEffect(() => {
+    if (selectedText?.fill) {
+      setLocalFill(selectedText.fill);
+    }
+  }, [selected?.id, selectedText?.fill]);
+
   const selectedElements = slideElements.filter((el) =>
     selectedIds.includes(el.id),
   );
-  const selectedText = selected?.type === "text" ? selected : null;
   const hasMultiSameTypeSelection =
     selectedElements.length > 1 &&
     selectedElements.every((el) => el.type === selectedElements[0].type);
@@ -145,8 +162,9 @@ export function CanvasSidebar({
             Custom Theme
             <input
               type="color"
-              value={colorPickerValue}
-              onChange={(evt) => onBackgroundColor(evt.target.value)}
+              value={localCanvasBg || "#ffffff"}
+              onChange={(evt) => setLocalCanvasBg(evt.target.value)}
+              onBlur={() => onBackgroundColor(localCanvasBg)}
               className="sr-only"
               aria-label="Pick custom canvas background color"
             />
@@ -194,8 +212,9 @@ export function CanvasSidebar({
             <Plus className="h-4 w-4" />
             <input
               type="color"
-              value={colorPickerValue}
-              onChange={(evt) => onBackgroundColor(evt.target.value)}
+              value={localCanvasBg || "#ffffff"}
+              onChange={(evt) => setLocalCanvasBg(evt.target.value)}
+              onBlur={() => onBackgroundColor(localCanvasBg)}
               className="sr-only"
               aria-label="Add custom background color"
             />
@@ -332,8 +351,9 @@ export function CanvasSidebar({
             />
             <input
               type="color"
-              value={selected.fill}
-              onChange={(evt) => applyStyleUpdate({ fill: evt.target.value })}
+              value={localFill}
+              onChange={(evt) => setLocalFill(evt.target.value)}
+              onBlur={() => applyStyleUpdate({ fill: localFill })}
               className="h-8 rounded-md border border-border bg-background"
               aria-label="Text color"
             />

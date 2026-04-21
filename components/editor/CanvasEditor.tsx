@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import type Konva from "konva";
 import { ASPECT_RATIO_DIMENSIONS, type AspectRatio } from "@/types/canvas";
 import { useShallow } from "zustand/shallow";
@@ -93,6 +93,14 @@ export function CanvasEditor() {
   const canvasSize =
     ASPECT_RATIO_DIMENSIONS[(aspectRatio as AspectRatio) || "4:5"];
 
+  const slideRef = useRef(slide);
+  const selectedElementIdsRef = useRef(selectedElementIds);
+
+  useEffect(() => {
+    slideRef.current = slide;
+    selectedElementIdsRef.current = selectedElementIds;
+  }, [slide, selectedElementIds]);
+
   useEffect(() => {
     ensureSlidesFromCards(cards, aspectRatio, themeSettings);
   }, [cards, aspectRatio, themeSettings, ensureSlidesFromCards]);
@@ -128,11 +136,14 @@ export function CanvasEditor() {
         return;
       }
 
+      const currentSlide = slideRef.current;
+      const currentSelectedIds = selectedElementIdsRef.current;
+
       const selectedTextElement =
-        selectedElementIds.length === 1
-          ? slide?.elements.find(
+        currentSelectedIds.length === 1
+          ? currentSlide?.elements.find(
               (el) =>
-                el.id === selectedElementIds[0] &&
+                el.id === currentSelectedIds[0] &&
                 el.type === "text" &&
                 !el.locked,
             )
@@ -156,7 +167,7 @@ export function CanvasEditor() {
         return;
       }
       if (evt.key === "Delete" || evt.key === "Backspace") {
-        if (selectedElementIds.length === 0) return;
+        if (currentSelectedIds.length === 0) return;
 
         if (evt.key === "Backspace" && selectedTextElement?.type === "text") {
           evt.preventDefault();
@@ -176,7 +187,7 @@ export function CanvasEditor() {
       }
       if (evt.key.startsWith("Arrow")) {
         const amount = evt.shiftKey ? 10 : 1;
-        if (selectedElementIds.length === 0) return;
+        if (currentSelectedIds.length === 0) return;
         evt.preventDefault();
         pushHistory();
         if (evt.key === "ArrowUp") moveSelectedBy(0, -amount);
@@ -188,18 +199,7 @@ export function CanvasEditor() {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [
-    copySelected,
-    deleteSelected,
-    moveSelectedBy,
-    pasteClipboard,
-    pushHistory,
-    redo,
-    selectedElementIds,
-    slide,
-    undo,
-    updateElement,
-  ]);
+  }, []);
 
   if (!cards.length || !slide) {
     return (

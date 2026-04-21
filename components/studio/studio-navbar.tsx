@@ -1,9 +1,10 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 import { useStudioStore } from "@/store/useStudioStore";
-import { getAccessibleTextColor } from "@/lib/utils";
+import { useShallow } from "zustand/shallow";
+import { getAccessibleTextColor, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -44,7 +45,19 @@ export function StudioNavbar() {
     themeSettings,
     projectId,
     setProjectId,
-  } = useStudioStore();
+  } = useStudioStore(
+    useShallow((s) => ({
+      cards: s.cards,
+      prompt: s.prompt,
+      tone: s.tone,
+      platform: s.platform,
+      aspectRatio: s.aspectRatio,
+      numCards: s.numCards,
+      themeSettings: s.themeSettings,
+      projectId: s.projectId,
+      setProjectId: s.setProjectId,
+    })),
+  );
   const { user } = useAuth();
   const router = useRouter();
   const { setTheme, resolvedTheme } = useTheme();
@@ -53,8 +66,10 @@ export function StudioNavbar() {
   const activeTool = useCanvasStore((s) => s.activeTool);
   const gridEnabled = useCanvasStore((s) => s.gridEnabled);
   const rulerEnabled = useCanvasStore((s) => s.rulerEnabled);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleSaveProject = async () => {
+    if (isSaving) return;
     if (!user) {
       toast.error("Please log in to save projects.");
       router.push("/login");
@@ -65,11 +80,15 @@ export function StudioNavbar() {
       return;
     }
 
+    setIsSaving(true);
     try {
       const pId = projectId || crypto.randomUUID();
       const projectRef = doc(db, `users/${user.uid}/projects/${pId}`);
-      const canvasDocRef = doc(db, `users/${user.uid}/projects/${pId}/canvas/state`);
-      
+      const canvasDocRef = doc(
+        db,
+        `users/${user.uid}/projects/${pId}/canvas/state`,
+      );
+
       const mainPayload = {
         id: pId,
         userId: user.uid,
@@ -98,7 +117,7 @@ export function StudioNavbar() {
         setDoc(projectRef, mainPayload, { merge: true }),
         setDoc(canvasDocRef, canvasPayload, { merge: true }),
       ]);
-      
+
       if (!projectId) {
         setProjectId(pId);
       }
@@ -106,6 +125,8 @@ export function StudioNavbar() {
       toast.success("Project saved securely to cloud!");
     } catch (e: any) {
       toast.error("Failed to save: " + e.message);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -185,8 +206,9 @@ export function StudioNavbar() {
           aria-label="Save project"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
           onClick={handleSaveProject}
+          disabled={isSaving}
         >
-          <Save className="w-4 h-4" />
+          <Save className={cn("w-4 h-4", isSaving && "animate-pulse")} />
         </Button>
 
         {/* Export dropdown */}
