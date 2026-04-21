@@ -15,10 +15,7 @@ import {
   ValidationError,
 } from "@/lib/server/ai-security";
 
-const GEMINI_TEXT_MODELS = [
-  "gemini-2.5-flash",
-  "gemini-2.0-flash",
-];
+const GEMINI_TEXT_MODELS = ["gemini-2.5-flash", "gemini-3.0-flash-preview"];
 
 const cardSchema = {
   type: Type.ARRAY,
@@ -247,7 +244,8 @@ export async function POST(req: Request) {
         return NextResponse.json(
           {
             status: "processing",
-            message: "A request with this key is already in progress. Please wait.",
+            message:
+              "A request with this key is already in progress. Please wait.",
             retry_after: 5,
           },
           { status: 202 },
@@ -623,9 +621,14 @@ export async function POST(req: Request) {
     }
 
     // All models exhausted
-    const errorMsg =
+    let errorMsg =
       lastError?.message ||
       "Content generation failed across all models. Please try again in a minute.";
+
+    if (errorMsg.toLowerCase().includes("quota") || errorMsg.includes("429")) {
+      errorMsg =
+        "AI generation is currently experiencing high demand. Please try again in a few moments.";
+    }
 
     if (idempotencyKey) {
       const db = getFirebaseAdminDb();
@@ -639,10 +642,7 @@ export async function POST(req: Request) {
       );
     }
 
-    return NextResponse.json(
-      { error: errorMsg },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: errorMsg }, { status: 503 });
   } catch (error: any) {
     const authError = toApiAuthErrorResponse(error);
     if (authError) return authError;

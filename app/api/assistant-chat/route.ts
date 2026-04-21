@@ -14,11 +14,7 @@ import {
 } from "@/lib/server/ai-security";
 
 // Model fallback chain
-const GEMINI_TEXT_MODELS = [
-  "gemini-2.5-flash",
-  "gemini-3.0-flash-preview",
-  "gemini-2.0-flash",
-];
+const GEMINI_TEXT_MODELS = ["gemini-2.5-flash", "gemini-3.0-flash-preview"];
 
 type AssistantHistoryItem = {
   role: "user" | "assistant";
@@ -276,6 +272,18 @@ function buildAssistantSystemInstruction(context: {
     `.trim();
 }
 
+function getGeminiToken(): string {
+  return (
+    process.env.GEMINI_API_KEY ||
+    process.env.GEMINI_PUBLIC_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
+    ""
+  )
+    .replace(/['"]/g, "")
+    .trim();
+}
+
 // POST handler
 export async function POST(req: Request) {
   let uid = "";
@@ -290,8 +298,7 @@ export async function POST(req: Request) {
 
     enforceIpRateLimit(req, "assistant-chat");
 
-    let key = process.env.GEMINI_API_KEY || "";
-    key = key.replace(/['"]/g, "").trim();
+    const key = getGeminiToken();
 
     if (!key) {
       return NextResponse.json(

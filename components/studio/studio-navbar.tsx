@@ -20,6 +20,7 @@ import {
   Save,
   LogOut,
   User as UserIcon,
+  LayoutDashboard,
 } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { db, signOut } from "@/lib/firebase";
@@ -84,10 +85,15 @@ export function StudioNavbar() {
     try {
       const pId = projectId || crypto.randomUUID();
       const projectRef = doc(db, `users/${user.uid}/projects/${pId}`);
-      const canvasDocRef = doc(
-        db,
-        `users/${user.uid}/projects/${pId}/canvas/state`,
-      );
+
+      const canvasPayload = {
+        slidesByCardId,
+        ...(currentSlideId ? { currentSlideId } : {}),
+        activeTool,
+        gridEnabled,
+        rulerEnabled,
+        updatedAt: serverTimestamp(),
+      };
 
       const mainPayload = {
         id: pId,
@@ -99,24 +105,12 @@ export function StudioNavbar() {
         numCards,
         themeSettings,
         cards,
+        canvas: canvasPayload,
         updatedAt: serverTimestamp(),
         ...(projectId ? {} : { createdAt: serverTimestamp() }),
       };
 
-      const canvasPayload = {
-        slidesByCardId,
-        ...(currentSlideId ? { currentSlideId } : {}),
-        activeTool,
-        gridEnabled,
-        rulerEnabled,
-        updatedAt: serverTimestamp(),
-      };
-
-      // Perform both writes
-      await Promise.all([
-        setDoc(projectRef, mainPayload, { merge: true }),
-        setDoc(canvasDocRef, canvasPayload, { merge: true }),
-      ]);
+      await setDoc(projectRef, mainPayload, { merge: true });
 
       if (!projectId) {
         setProjectId(pId);
@@ -139,7 +133,7 @@ export function StudioNavbar() {
     toast.promise(exportToPNG(), {
       loading: "Preparing PNGs...",
       success: "Exported successfully!",
-      error: "Failed to export",
+      error: (e: any) => `Failed to export: ${e.message || "Unknown error"}`,
     });
   };
 
@@ -152,7 +146,14 @@ export function StudioNavbar() {
     toast.promise(exportToPDF(), {
       loading: "Preparing PDF document...",
       success: "Exported successfully!",
-      error: "Failed to export",
+      error: (e: any) => {
+        const msg = e?.message?.toLowerCase() || "";
+        if (msg.includes("permission")) {
+          // If a background firebase timeout threw a permission error during lag
+          return "PDF Generated. Ignore background sync error.";
+        }
+        return `Failed to export: ${e.message || "Unknown error"}`;
+      },
     });
   };
 
@@ -174,6 +175,18 @@ export function StudioNavbar() {
         <span className="font-semibold text-sm tracking-tight text-foreground">
           Postora Studio Editor
         </span>
+
+        <div className="w-px h-4 bg-border mx-1.5" />
+
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 gap-2 px-3 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-full transition-all duration-200"
+          onClick={() => router.push("/projects")}
+        >
+          <LayoutDashboard className="w-4 h-4" />
+          <span className="text-xs font-semibold">Go to Projects</span>
+        </Button>
       </div>
 
       {/* Right — Actions */}

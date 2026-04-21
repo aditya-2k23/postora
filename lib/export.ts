@@ -174,6 +174,8 @@ const getAllSlideExports = async () => {
     exports.push({ dataUrl, width, height });
     stage.destroy();
     container.remove();
+    // Yield to the event loop so the UI doesn't freeze
+    await new Promise((resolve) => setTimeout(resolve, 10));
   }
   return exports;
 };
@@ -202,7 +204,8 @@ export const exportToPDF = async () => {
     format: [first.width, first.height],
   });
 
-  slides.forEach((slide, index) => {
+  for (let index = 0; index < slides.length; index++) {
+    const slide = slides[index];
     if (index > 0) {
       pdf.addPage(
         [slide.width, slide.height],
@@ -210,7 +213,10 @@ export const exportToPDF = async () => {
       );
     }
     pdf.addImage(slide.dataUrl, "PNG", 0, 0, slide.width, slide.height);
-  });
+    
+    // Yield to the event loop to prevent blocking UI while jsPDF works
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
 
   pdf.save("social-carousel.pdf");
 };

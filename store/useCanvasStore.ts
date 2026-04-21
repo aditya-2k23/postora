@@ -73,7 +73,7 @@ const defaultSlideFromCard = (
     y: 0,
     width: size.width,
     height: size.height,
-    opacity: theme.style === "minimal" ? 0.2 : 0.55,
+    opacity: theme.style === "minimal" ? 0.6 : 0.9,
     cornerRadius: 0,
   };
 
@@ -91,7 +91,7 @@ const defaultSlideFromCard = (
         width: size.width - padding * 2,
         height: 8,
         fill: theme.primaryColor,
-        opacity: theme.style === "bold" ? 0.4 : 0.2,
+        opacity: theme.style === "bold" ? 0.8 : 0.6,
       },
       {
         id: uid(),
