@@ -47,9 +47,13 @@ const sanitizePersistedSlides = (slides: Record<string, CanvasSlide>) => {
   return sanitized;
 };
 
-const getCanvasSize = (ratio: string) =>
-  ASPECT_RATIO_DIMENSIONS[(ratio as AspectRatio) || "4:5"] ??
-  ASPECT_RATIO_DIMENSIONS["4:5"];
+const getCanvasSize = (ratio: string): { width: number; height: number } => {
+  const r = ratio as AspectRatio;
+  if (r in ASPECT_RATIO_DIMENSIONS) {
+    return ASPECT_RATIO_DIMENSIONS[r];
+  }
+  return ASPECT_RATIO_DIMENSIONS["4:5"];
+};
 
 const defaultSlideFromCard = (
   card: SocialCard,

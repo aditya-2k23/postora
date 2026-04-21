@@ -55,14 +55,13 @@ ENFORCE_AUTH="true"
 ENFORCE_QUOTAS="true"
 ENABLE_IMAGE_MIGRATION="false"
 ENFORCE_ADMIN_AUTH="true"
-ADMIN_SECRET="replace-with-a-long-random-secret"
 
 APP_URL="http://localhost:3000"
 ```
 
 1. Enable **Google Sign-In** within your Firebase Console `Authentication` menu.
-2. Set up Firestore rules so project writes are user-scoped and AI usage collections are read-only for clients.
+2. In Firebase Console, set demo Firestore rules so authenticated users can read/write only their own docs under `users/{uid}/projects/{projectId}` (and optionally `users/{uid}` for profile docs).
 3. AI routes require Firebase ID token bearer auth, and daily/per-minute limits are enforced server-side.
 4. Cloudinary credentials are required for durable image persistence and legacy base64 migration.
-5. `ADMIN_SECRET` + `ENFORCE_ADMIN_AUTH` protect the admin usage endpoint.
+5. `ENFORCE_ADMIN_AUTH` protect the admin usage endpoint.
 6. Run `npm run dev` and navigate to `http://localhost:3000`.

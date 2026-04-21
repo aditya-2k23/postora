@@ -284,22 +284,6 @@ export async function POST(req: Request) {
       });
     }
 
-    if (projectId && cardId) {
-      const metadataRef = db.doc(
-        `users/${uid}/projects/${projectId}/images/${cardId}`,
-      );
-      await metadataRef.set(
-        {
-          promptHash,
-          providerModel: selectedModel,
-          secureUrl,
-          createdAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true },
-      );
-    }
-
     if (idempotencyKey) {
       await db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`).set(
         {

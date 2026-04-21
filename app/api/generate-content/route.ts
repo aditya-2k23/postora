@@ -16,9 +16,8 @@ import {
 } from "@/lib/server/ai-security";
 
 const GEMINI_TEXT_MODELS = [
+  "gemini-2.5-flash",
   "gemini-2.0-flash",
-  "gemini-1.5-flash",
-  "gemini-2.0-flash-lite-preview-02-05",
 ];
 
 const cardSchema = {
@@ -112,9 +111,9 @@ function validateGenerateContentPayload(
       ? numCards
       : Number.parseInt(String(numCards), 10);
 
-  if (!Number.isInteger(parsedCards) || parsedCards < 2 || parsedCards > 12) {
+  if (!Number.isInteger(parsedCards) || parsedCards < 1 || parsedCards > 12) {
     throw new ValidationError(
-      "Number of cards must be an integer between 2 and 12.",
+      "Number of cards must be an integer between 1 and 12.",
     );
   }
 

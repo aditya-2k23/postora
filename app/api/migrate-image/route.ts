@@ -55,9 +55,7 @@ function validatePayload(payload: unknown) {
     "data:image/gif;base64,",
   ];
 
-  const hasValidPrefix = allowedPrefixes.some((p) =>
-    imageBase64.startsWith(p),
-  );
+  const hasValidPrefix = allowedPrefixes.some((p) => imageBase64.startsWith(p));
 
   if (!hasValidPrefix) {
     throw new ValidationError(
@@ -106,22 +104,6 @@ export async function POST(req: Request) {
     }
 
     const secureUrl = await uploadToCloudinary(imageBase64, uid);
-
-    const db = getFirebaseAdminDb();
-    const metadataRef = db.doc(
-      `users/${uid}/projects/${projectId}/images/${cardId}`,
-    );
-
-    await metadataRef.set(
-      {
-        promptHash: "migrated-legacy-image",
-        providerModel: "legacy-base64",
-        secureUrl,
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
 
     return NextResponse.json({ imageUrl: secureUrl });
   } catch (error: any) {

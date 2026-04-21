@@ -5,11 +5,12 @@ import { getAccessibleTextColor } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Sparkles,
-  MoreVertical,
   Send,
   Loader2,
   MessageSquare,
   Zap,
+  LayoutTemplate,
+  ChevronDown,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -18,6 +19,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
   DropdownMenuLabel,
+  DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import {
   Select,
@@ -133,6 +135,7 @@ export function LeftSidebar() {
 
   const [activeTab, setActiveTab] = useState<SidebarTab>("generate");
   const [inputValue, setInputValue] = useState("");
+  const [settingsExpanded, setSettingsExpanded] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const assistantEndRef = useRef<HTMLDivElement>(null);
 
@@ -488,93 +491,25 @@ export function LeftSidebar() {
           </span>
         </div>
         <DropdownMenu>
-          <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
-            <MoreVertical className="w-4 h-4" />
+          <DropdownMenuTrigger
+            className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            title="Quick Templates"
+          >
+            <LayoutTemplate className="w-4 h-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuGroup>
-              <DropdownMenuLabel>Generation Settings</DropdownMenuLabel>
+              <DropdownMenuLabel>Quick Templates</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <div className="p-3 space-y-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Tone</Label>
-                  <Select value={tone} onValueChange={(v) => v && setTone(v)}>
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TONES.map((t) => (
-                        <SelectItem key={t} value={t} className="text-xs">
-                          {t}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Platform</Label>
-                  <Select
-                    value={platform}
-                    onValueChange={(v) => v && setPlatform(v)}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PLATFORMS.map((p) => (
-                        <SelectItem key={p} value={p} className="text-xs">
-                          {p}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Aspect Ratio</Label>
-                  <Select
-                    value={aspectRatio}
-                    onValueChange={(v) => v && setAspectRatio(v)}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1:1" className="text-xs">
-                        1:1 Square
-                      </SelectItem>
-                      <SelectItem value="4:5" className="text-xs">
-                        4:5 Portrait
-                      </SelectItem>
-                      <SelectItem value="9:16" className="text-xs">
-                        9:16 Story
-                      </SelectItem>
-                      <SelectItem value="16:9" className="text-xs">
-                        16:9 Landscape
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <Label className="text-xs">Cards</Label>
-                    <span className="text-xs font-medium text-muted-foreground">
-                      {numCards}
-                    </span>
-                  </div>
-                  <Slider
-                    value={[numCards]}
-                    min={2}
-                    max={12}
-                    step={1}
-                    onValueChange={(val) =>
-                      setNumCards(Array.isArray(val) ? val[0] : val)
-                    }
-                  />
-                </div>
-              </div>
+              {QUICK_TEMPLATES.map((t) => (
+                <DropdownMenuItem
+                  key={t.label}
+                  onClick={() => setInputValue(t.prompt)}
+                  className="text-xs cursor-pointer py-2 focus:bg-accent focus:text-foreground"
+                >
+                  {t.label}
+                </DropdownMenuItem>
+              ))}
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -676,12 +611,12 @@ export function LeftSidebar() {
               <div className="flex-1 relative">
                 <TextareaAutosize
                   placeholder="Describe your post idea..."
-                  className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2.5 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/60 text-foreground"
+                  className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60 text-foreground transition-all shadow-sm min-h-[44px]"
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyDown={handleKeyDown}
                   minRows={1}
-                  maxRows={5}
+                  maxRows={6}
                 />
               </div>
               <Button
@@ -712,22 +647,120 @@ export function LeftSidebar() {
               </div>
             )}
 
-            {/* Quick Templates */}
+            {/* Generation Settings */}
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                Quick Templates
-              </p>
-              <div className="grid grid-cols-2 gap-1.5">
-                {QUICK_TEMPLATES.map((t) => (
-                  <button
-                    key={t.label}
-                    onClick={() => setInputValue(t.prompt)}
-                    className="text-[11px] px-2.5 py-1.5 rounded-md bg-muted/60 border border-border text-foreground/80 hover:bg-muted hover:text-foreground transition-colors text-left truncate"
+              <button
+                onClick={() => setSettingsExpanded(!settingsExpanded)}
+                className="w-full flex items-center justify-between group outline-none"
+              >
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-foreground transition-colors mb-2">
+                  Generation Settings
+                </p>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-200 mb-2 ${
+                    settingsExpanded ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+
+              <div
+                className={`grid transition-all duration-300 ease-in-out ${
+                  settingsExpanded
+                    ? "grid-rows-[1fr] opacity-100 mb-2"
+                    : "grid-rows-[0fr] opacity-0"
+                }`}
+              >
+                <div className="overflow-hidden">
+                  <div className="grid grid-cols-2 gap-3 bg-muted/20 p-3 rounded-lg border border-border">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground font-medium">
+                        Tone
+                      </Label>
+                  <Select value={tone} onValueChange={(v) => v && setTone(v)}>
+                    <SelectTrigger className="h-8 text-xs bg-card">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TONES.map((t) => (
+                        <SelectItem key={t} value={t} className="text-xs">
+                          {t}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground font-medium">
+                    Platform
+                  </Label>
+                  <Select
+                    value={platform}
+                    onValueChange={(v) => v && setPlatform(v)}
                   >
-                    {t.label}
-                  </button>
-                ))}
+                    <SelectTrigger className="h-8 text-xs bg-card">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PLATFORMS.map((p) => (
+                        <SelectItem key={p} value={p} className="text-xs">
+                          {p}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground font-medium">
+                    Aspect Ratio
+                  </Label>
+                  <Select
+                    value={aspectRatio}
+                    onValueChange={(v) => v && setAspectRatio(v)}
+                  >
+                    <SelectTrigger className="h-8 text-xs bg-card">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1:1" className="text-xs">
+                        1:1 Square
+                      </SelectItem>
+                      <SelectItem value="4:5" className="text-xs">
+                        4:5 Portrait
+                      </SelectItem>
+                      <SelectItem value="9:16" className="text-xs">
+                        9:16 Story
+                      </SelectItem>
+                      <SelectItem value="16:9" className="text-xs">
+                        16:9 Landscape
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center mb-1">
+                    <Label className="text-xs text-muted-foreground font-medium">
+                      Cards
+                    </Label>
+                    <span className="text-[10px] font-medium text-foreground bg-accent/50 px-1.5 py-0.5 rounded">
+                      {numCards}
+                    </span>
+                  </div>
+                  <Slider
+                    value={[numCards]}
+                    min={1}
+                    max={12}
+                    step={1}
+                    onValueChange={(val) =>
+                      setNumCards(Array.isArray(val) ? val[0] : val)
+                    }
+                  />
+                </div>
               </div>
+            </div>
+            </div>
             </div>
           </div>
         </>
@@ -812,12 +845,12 @@ export function LeftSidebar() {
                       ? "Ask about your carousel..."
                       : "Generate a carousel first..."
                   }
-                  className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2.5 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/60 text-foreground"
+                  className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60 text-foreground transition-all shadow-sm min-h-[44px]"
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyDown={handleKeyDown}
                   minRows={1}
-                  maxRows={5}
+                  maxRows={6}
                   disabled={!hasCards}
                 />
               </div>

@@ -1,30 +1,11 @@
 import { NextResponse } from "next/server";
 import { getFirebaseAdminDb } from "@/lib/server/firebase-admin";
 
-if (process.env.NODE_ENV === "production" && !process.env.ADMIN_SECRET) {
-  throw new Error(
-    "Missing required ADMIN_SECRET in production for /api/admin/usage.",
-  );
-}
-
 const isAdminAuthEnforced = process.env.ENFORCE_ADMIN_AUTH !== "false";
 
 const requireAdminAuth = (req: Request) => {
   if (!isAdminAuthEnforced) {
     return null;
-  }
-
-  const adminSecret = process.env.ADMIN_SECRET;
-  if (!adminSecret) {
-    return NextResponse.json(
-      { error: "Server admin authentication is not configured." },
-      { status: 500 },
-    );
-  }
-
-  const authHeader = req.headers.get("authorization") || "";
-  if (authHeader !== `Bearer ${adminSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   return null;
@@ -67,6 +48,9 @@ export async function GET(req: Request) {
     });
   } catch (err: any) {
     console.error("[admin API] fetch usage error:", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
   }
 }

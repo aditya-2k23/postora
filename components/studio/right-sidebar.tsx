@@ -145,23 +145,29 @@ export function RightSidebar() {
               }),
             });
             const data = await res.json();
-            
+
             if (!res.ok) {
               if (res.status === 429) {
-                 throw new Error(data.errorType === "RateLimitExceeded" ? "Too many requests. Please slow down and try again." : "You've reached your daily AI limit. Please come back tomorrow.");
+                throw new Error(
+                  data.errorType === "RateLimitExceeded"
+                    ? "Too many requests. Please slow down and try again."
+                    : "You've reached your daily AI limit. Please come back tomorrow.",
+                );
               }
               throw new Error(data.error || "Failed to regenerate image");
             }
             if (!data.imageUrl) {
-               throw new Error("Failed to regenerate image");
+              throw new Error("Failed to regenerate image");
             }
-            
+
             if (data.quotaRemaining !== undefined) {
-               useStudioStore.getState().setQuotaRemaining(data.quotaRemaining);
+              useStudioStore.getState().setQuotaRemaining(data.quotaRemaining);
             }
 
             updateCard(currentCard.id, { imageUrl: data.imageUrl });
-            useCanvasStore.getState().syncCardImage(currentCard.id, data.imageUrl);
+            useCanvasStore
+              .getState()
+              .syncCardImage(currentCard.id, data.imageUrl);
             toast.success("Image regenerated");
           } catch (error: unknown) {
             const message =
@@ -190,7 +196,7 @@ export function RightSidebar() {
           const reader = new FileReader();
           reader.onload = async () => {
             if (typeof reader.result !== "string") return;
-            
+
             try {
               const authToken = await requireAiToken();
               const res = await fetch("/api/upload-image", {
@@ -202,12 +208,12 @@ export function RightSidebar() {
                 body: JSON.stringify({ imageBase64: reader.result }),
               });
 
+              const data = await res.json();
               if (!res.ok) {
-                const data = await res.json();
                 throw new Error(data.error || "Upload failed");
               }
 
-              const { imageUrl } = await res.json();
+              const { imageUrl } = data;
               pushHistory();
               updateElement(selectedImage.id, { src: imageUrl });
               toast.success("Image updated");
@@ -220,7 +226,7 @@ export function RightSidebar() {
         onAddElement={(type) => {
           pushHistory();
           const id = crypto.randomUUID();
-          
+
           if (type === "text") {
             addElement({
               id,

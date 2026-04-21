@@ -14,7 +14,11 @@ import {
 } from "@/lib/server/ai-security";
 
 // Model fallback chain
-const GEMINI_TEXT_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+const GEMINI_TEXT_MODELS = [
+  "gemini-2.5-flash",
+  "gemini-3.0-flash-preview",
+  "gemini-2.0-flash",
+];
 
 type AssistantHistoryItem = {
   role: "user" | "assistant";

@@ -20,9 +20,8 @@ import { RightSidebar } from "@/components/studio/right-sidebar";
 import { SlideManager } from "@/components/studio/slide-manager";
 import { db } from "@/lib/firebase";
 import {
-  collection,
   doc,
-  getDocs,
+  getDoc,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -117,43 +116,19 @@ export default function StudioPage() {
     let needsReconciliation = false;
     let needsMigration = false;
     for (const card of cards) {
-      if (!card.imageUrl && card.imagePrompt) {
-        needsReconciliation = true;
-      }
       if (card.imageUrl && card.imageUrl.startsWith("data:image/")) {
         needsMigration = true;
       }
     }
 
-    if (!needsReconciliation && !needsMigration) {
+    if (!needsMigration) {
       hasReconciledRef.current = true;
       return;
     }
 
     const backfillImages = async () => {
       try {
-        // 1. Fallback for entirely missing image URLs
-        if (needsReconciliation) {
-          const imagesSnap = await getDocs(
-            collection(db, `users/${user.uid}/projects/${projectId}/images`),
-          );
-
-          imagesSnap.forEach((docSnap) => {
-            const cardId = docSnap.id;
-            const data = docSnap.data();
-            if (data && data.secureUrl) {
-              const card = cards.find((c) => c.id === cardId);
-              if (card && !card.imageUrl) {
-                useStudioStore
-                  .getState()
-                  .updateCard(cardId, { imageUrl: data.secureUrl });
-                useCanvasStore.getState().syncCardImage(cardId, data.secureUrl);
-              }
-            }
-          });
-        }
-
-        // 2. Lazy migration for legacy base64 images
+        // Lazy migration for legacy base64 images.
         if (needsMigration) {
           const token = await user.getIdToken();
           for (const card of cards) {
@@ -205,16 +180,25 @@ export default function StudioPage() {
 
   // Initial canvas load for existing projects
   useEffect(() => {
-    if (!mounted || !user || !projectId || hasLoadedCanvasRef.current === projectId) return;
-    
+    if (
+      !mounted ||
+      !user ||
+      !projectId ||
+      hasLoadedCanvasRef.current === projectId
+    )
+      return;
+
     const loadCanvasData = async () => {
       try {
-        const canvasDocRef = doc(db, `users/${user.uid}/projects/${projectId}/canvas/state`);
-        const { getDoc } = await import("firebase/firestore");
-        const canvasSnap = await getDoc(canvasDocRef);
-        
-        if (canvasSnap.exists()) {
-          const canvas = canvasSnap.data();
+        const projectDocRef = doc(
+          db,
+          `users/${user.uid}/projects/${projectId}`,
+        );
+        const projectSnap = await getDoc(projectDocRef);
+        const projectData = projectSnap.exists() ? projectSnap.data() : null;
+        const canvas = projectData?.canvas;
+
+        if (canvas && typeof canvas === "object") {
           useCanvasStore.setState({
             slidesByCardId: canvas.slidesByCardId || {},
             currentSlideId: canvas.currentSlideId || canvasCurrentSlideId,
@@ -235,7 +219,7 @@ export default function StudioPage() {
         console.error("Failed to load separate canvas state:", error);
       }
     };
-    
+
     loadCanvasData();
   }, [mounted, user, projectId, canvasCurrentSlideId]);
 
@@ -274,7 +258,10 @@ export default function StudioPage() {
           lastCardsSyncedRef.current = currentCardsJson;
         } catch (updateError: any) {
           if (updateError.code === "not-found") {
-            await setDoc(projectRef, { ...payload, createdAt: serverTimestamp() });
+            await setDoc(projectRef, {
+              ...payload,
+              createdAt: serverTimestamp(),
+            });
             lastCardsSyncedRef.current = currentCardsJson;
           } else {
             console.error("Metadata sync failed:", updateError);
@@ -300,7 +287,13 @@ export default function StudioPage() {
 
   // Sync 2: Canvas State
   useEffect(() => {
-    if (!mounted || !user || !projectId || Object.keys(canvasSlides).length === 0) return;
+    if (
+      !mounted ||
+      !user ||
+      !projectId ||
+      Object.keys(canvasSlides).length === 0
+    )
+      return;
 
     const currentCanvasJson = JSON.stringify({
       slidesByCardId: canvasSlides,
@@ -314,17 +307,38 @@ export default function StudioPage() {
 
     const timer = window.setTimeout(async () => {
       try {
-        const canvasDocRef = doc(db, `users/${user.uid}/projects/${projectId}/canvas/state`);
-        const payload = {
+        const projectRef = doc(db, `users/${user.uid}/projects/${projectId}`);
+        const canvasPayload = {
           slidesByCardId: canvasSlides,
           currentSlideId: canvasCurrentSlideId,
           activeTool,
           gridEnabled,
           rulerEnabled,
-          updatedAt: serverTimestamp(),
         };
 
-        await setDoc(canvasDocRef, payload, { merge: true });
+        try {
+          await updateDoc(projectRef, {
+            canvas: canvasPayload,
+            updatedAt: serverTimestamp(),
+          });
+        } catch (updateError: any) {
+          if (updateError.code === "not-found") {
+            await setDoc(
+              projectRef,
+              {
+                id: projectId,
+                userId: user.uid,
+                canvas: canvasPayload,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+              },
+              { merge: true },
+            );
+          } else {
+            throw updateError;
+          }
+        }
+
         lastCanvasSyncedRef.current = currentCanvasJson;
       } catch (error) {
         console.error("Canvas sync failed:", error);
