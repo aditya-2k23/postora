@@ -19,10 +19,10 @@ export default function LandingPage() {
   ];
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 dark:bg-zinc-950 p-6 overscroll-none overflow-x-hidden">
+    <div className="min-h-[100dvh] flex flex-col items-center bg-gray-50 dark:bg-zinc-950 p-6 relative overflow-x-hidden">
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none"></div>
 
-      <main className="max-w-5xl w-full z-10 flex flex-col items-center text-center space-y-12 py-20">
+      <main className="my-auto max-w-5xl w-full z-10 flex flex-col items-center text-center space-y-12 py-20">
         <div className="space-y-6">
           <div className="inline-block px-4 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-700 text-sm font-medium mb-4">
             <Sparkles className="inline-block w-4 h-4 mr-2" />

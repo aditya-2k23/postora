@@ -16,7 +16,7 @@ An AI-powered social media post and carousel creator using Next.js 15, Tailwind,
 - **Zustand (`store/useStudioStore.ts`)**: Powers the intricate canvas state. Implements `persist` middleware for local caching.
 - **Tailwind CSS & Shadcn UI**: Flexible design system.
 - **Firebase Firestore & Auth**: Secure cloud storage mapping records against authenticated user scopes.
-- **Google GenAI SDK**: Uses `gemini-3-flash-preview` and `gemini-3.1-flash-image-preview` for content and graphics.
+- **Google GenAI SDK + Hugging Face + Cloudinary**: Uses Gemini for content generation, Hugging Face for AI image generation, and Cloudinary for durable image storage.
 
 ## Quick Start
 

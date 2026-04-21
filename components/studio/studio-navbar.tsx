@@ -11,13 +11,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Download, ChevronDown, Sun, Moon, Save } from "lucide-react";
+import { Download, ChevronDown, Sun, Moon, Save, LogOut, User as UserIcon } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
-import { db } from "@/lib/firebase";
+import { db, signOut } from "@/lib/firebase";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
 import { useCanvasStore } from "@/store/useCanvasStore";
+import { useRouter } from "next/navigation";
 
 export function StudioNavbar() {
   const mounted = useSyncExternalStore(
@@ -37,6 +38,7 @@ export function StudioNavbar() {
     setProjectId,
   } = useStudioStore();
   const { user } = useAuth();
+  const router = useRouter();
   const { setTheme, resolvedTheme } = useTheme();
   const slidesByCardId = useCanvasStore((s) => s.slidesByCardId);
   const currentSlideId = useCanvasStore((s) => s.currentSlideId);
@@ -46,7 +48,8 @@ export function StudioNavbar() {
 
   const handleSaveProject = async () => {
     if (!user) {
-      toast.error("Please sign in to save projects.");
+      toast.error("Please log in to save projects.");
+      router.push("/login");
       return;
     }
     if (cards.length === 0) {
@@ -211,6 +214,32 @@ export function StudioNavbar() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {/* Auth Buttons */}
+        {mounted && user ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={async () => {
+              await signOut();
+              toast.success("Successfully logged out.");
+            }}
+            className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
+          >
+            <LogOut className="w-4 h-4" />
+            <span className="hidden sm:inline">Log out</span>
+          </Button>
+        ) : mounted ? (
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => router.push("/login")}
+            className="flex items-center gap-2"
+          >
+            <UserIcon className="w-4 h-4" />
+            <span className="hidden sm:inline">Log in</span>
+          </Button>
+        ) : null}
       </div>
     </div>
   );

@@ -25,6 +25,7 @@ import {
   getDocs,
   serverTimestamp,
   setDoc,
+  updateDoc,
 } from "firebase/firestore";
 import {
   ResizableHandle,
@@ -203,30 +204,36 @@ export default function StudioPage() {
     const timer = window.setTimeout(async () => {
       try {
         const projectRef = doc(db, `users/${user.uid}/projects/${projectId}`);
-        await setDoc(
-          projectRef,
-          {
-            id: projectId,
-            userId: user.uid,
-            prompt,
-            platform,
-            tone,
-            aspectRatio,
-            themeSettings,
-            cards,
-            canvas: {
-              slidesByCardId: canvasSlides,
-              currentSlideId: canvasCurrentSlideId,
-              activeTool,
-              gridEnabled,
-              rulerEnabled,
-            },
-            updatedAt: serverTimestamp(),
+        const payload = {
+          id: projectId,
+          userId: user.uid,
+          prompt,
+          platform,
+          tone,
+          aspectRatio,
+          themeSettings,
+          cards,
+          canvas: {
+            slidesByCardId: canvasSlides,
+            currentSlideId: canvasCurrentSlideId,
+            activeTool,
+            gridEnabled,
+            rulerEnabled,
           },
-          { merge: true },
-        );
+          updatedAt: serverTimestamp(),
+        };
+
+        try {
+          await updateDoc(projectRef, payload);
+        } catch (updateError: any) {
+          if (updateError.code === "not-found") {
+            await setDoc(projectRef, { ...payload, createdAt: serverTimestamp() });
+          } else {
+            console.error("Auto-sync failed:", updateError);
+          }
+        }
       } catch (error) {
-        console.error("Auto-sync failed:", error);
+        console.error("Critical auto-sync construction failure:", error);
       }
     }, 1200);
 

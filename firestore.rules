@@ -53,9 +53,8 @@ service cloud.firestore {
     }
 
     match /users/{userId}/projects/{projectId} {
-      // Must check resource.data to prevent blanket list
-      allow get: if isSignedIn() && existing().userId == request.auth.uid;
-      allow list: if isSignedIn() && existing().userId == request.auth.uid;
+      allow get: if isSignedIn() && request.auth.uid == userId;
+      allow list: if isSignedIn() && request.auth.uid == userId;
       
       allow create: if isSignedIn() 
         && isValidId(projectId)
@@ -66,14 +65,14 @@ service cloud.firestore {
 
       allow update: if isSignedIn()
         && isValidId(projectId)
-        && existing().userId == request.auth.uid
+        && request.auth.uid == userId
         && isProject(incoming(), false)
         && incoming().createdAt == existing().createdAt
         && incoming().userId == existing().userId
         && incoming().updatedAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasOnly(['prompt', 'tone', 'platform', 'aspectRatio', 'numCards', 'themeSettings', 'cards', 'canvas', 'updatedAt']);
+        && incoming().diff(existing()).affectedKeys().hasOnly(['id', 'userId', 'prompt', 'tone', 'platform', 'aspectRatio', 'numCards', 'themeSettings', 'cards', 'canvas', 'updatedAt']);
 
-      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+      allow delete: if isSignedIn() && request.auth.uid == userId;
 
       match /images/{cardId} {
         allow read: if isSignedIn() && request.auth.uid == userId;
