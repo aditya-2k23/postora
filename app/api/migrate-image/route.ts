@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
-import { getFirebaseAdminDb } from "@/lib/server/firebase-admin";
-import { FieldValue } from "firebase-admin/firestore";
 import {
   requireAuthenticatedUser,
   toApiAuthErrorResponse,
@@ -10,6 +8,9 @@ import {
   enforceIpRateLimit,
   toAiSecurityErrorResponse,
   ValidationError,
+  assertDailyQuotaAvailable,
+  consumeDailyQuota,
+  recordAiUsageEvent,
 } from "@/lib/server/ai-security";
 
 cloudinary.config({
@@ -91,8 +92,6 @@ export async function POST(req: Request) {
     const decodedToken = await requireAuthenticatedUser(req);
     uid = decodedToken.uid;
 
-    enforceIpRateLimit(req, "generate-image");
-
     const { imageBase64, projectId, cardId } = validatePayload(
       await req.json(),
     );
@@ -103,7 +102,23 @@ export async function POST(req: Request) {
       );
     }
 
+    // 1. Assert Quota
+    await assertDailyQuotaAvailable(uid, "migrate-image");
+
+    enforceIpRateLimit(req, "migrate-image");
+
     const secureUrl = await uploadToCloudinary(imageBase64, uid);
+
+    // 2. Consume Quota on success
+    await consumeDailyQuota(uid, "migrate-image");
+
+    // 3. Record Event
+    await recordAiUsageEvent({
+      uid,
+      endpoint: "migrate-image",
+      success: true,
+      metadata: { projectId, cardId, length: imageBase64.length },
+    });
 
     return NextResponse.json({ imageUrl: secureUrl });
   } catch (error: any) {
@@ -111,7 +126,28 @@ export async function POST(req: Request) {
     if (authError) return authError;
 
     const securityError = toAiSecurityErrorResponse(error);
-    if (securityError) return securityError;
+    if (securityError) {
+      if (uid) {
+        await recordAiUsageEvent({
+          uid,
+          endpoint: "migrate-image",
+          success: false,
+          error: error?.message,
+          metadata: { errorType: error?.name || "SecurityError" },
+        });
+      }
+      return securityError;
+    }
+
+    if (uid) {
+      await recordAiUsageEvent({
+        uid,
+        endpoint: "migrate-image",
+        success: false,
+        error: error?.message,
+        metadata: { errorType: error?.name || "UnhandledError" },
+      });
+    }
 
     console.error("Image Migration Error:", error);
     return NextResponse.json(
