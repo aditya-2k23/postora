@@ -52,6 +52,8 @@ export default function StudioPage() {
   const numCards = useStudioStore((s) => s.numCards);
   const themeSettings = useStudioStore((s) => s.themeSettings);
   const cards = useStudioStore((s) => s.cards);
+  const chatHistory = useStudioStore((s) => s.chatHistory);
+  const assistantHistory = useStudioStore((s) => s.assistantHistory);
   const canvasSlides = useCanvasStore((s) => s.slidesByCardId);
   const canvasCurrentSlideId = useCanvasStore((s) => s.currentSlideId);
   const activeTool = useCanvasStore((s) => s.activeTool);
@@ -225,7 +227,7 @@ export default function StudioPage() {
 
   // Sync 1: Metadata and Cards
   useEffect(() => {
-    if (!mounted || !user || !projectId || cards.length === 0) return;
+    if (!mounted || !user || !projectId) return;
 
     const currentCardsJson = JSON.stringify({
       prompt,
@@ -235,6 +237,8 @@ export default function StudioPage() {
       numCards,
       themeSettings,
       cards,
+      chatHistory,
+      assistantHistory,
     });
 
     if (currentCardsJson === lastCardsSyncedRef.current) return;
@@ -252,6 +256,8 @@ export default function StudioPage() {
           numCards,
           themeSettings,
           cards,
+          chatHistory,
+          assistantHistory,
           updatedAt: serverTimestamp(),
         };
 
@@ -283,6 +289,8 @@ export default function StudioPage() {
     numCards,
     themeSettings,
     cards,
+    chatHistory,
+    assistantHistory,
     projectId,
     user,
     mounted,

@@ -14,7 +14,7 @@ import {
 } from "@/lib/server/ai-security";
 
 // Model fallback chain
-const GEMINI_TEXT_MODELS = ["gemini-2.5-flash", "gemini-3.0-flash-preview"];
+const GEMINI_TEXT_MODELS = ["gemini-2.5-flash", "gemini-3-flash-preview"];
 
 type AssistantHistoryItem = {
   role: "user" | "assistant";
@@ -433,18 +433,25 @@ export async function POST(req: Request) {
       }
     }
 
+    const rawError = lastError?.message || "All models failed";
+    console.error("[assistant-chat] Assistant failed across all models:", rawError);
+
+    let errorMsg = "The AI Assistant is temporarily unavailable. Please try again in a few moments.";
+    if (rawError.toLowerCase().includes("quota") || rawError.includes("429")) {
+      errorMsg = "Assistant is currently experiencing high demand. Please try again soon.";
+    } else if (rawError.toLowerCase().includes("not configured") || rawError.toLowerCase().includes("not found")) {
+      errorMsg = "AI configuration is being updated. Please try again shortly.";
+    }
+
     return NextResponse.json(
-      {
-        error:
-          lastError?.message ||
-          "Assistant failed across all models. Please try again in a minute.",
-      },
+      { error: errorMsg },
       { status: 503 },
     );
   } catch (error: any) {
     const authError = toApiAuthErrorResponse(error);
     if (authError) return authError;
 
+    console.error("[assistant-chat] Unhandled Error:", error);
     const securityError = toAiSecurityErrorResponse(error);
     if (securityError) {
       if (uid) {
@@ -484,7 +491,7 @@ export async function POST(req: Request) {
 
     console.error("Assistant Chat Error:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to get assistant response" },
+      { error: "Assistant could not process that request. Please try again." },
       { status: 500 },
     );
   }

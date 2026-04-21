@@ -164,6 +164,15 @@ export function LeftSidebar() {
 
   // ─── Generation flow ───
   const handleGenerate = async () => {
+    if (!projectId) {
+      toast.error(
+        "No active project. Please go to the Projects dashboard and create a new project first.",
+        { duration: 5000 }
+      );
+      router.push("/projects");
+      return;
+    }
+
     const text = inputValue.trim();
     if (!text) {
       toast.error("Please enter a prompt idea first.");
@@ -254,28 +263,32 @@ export function LeftSidebar() {
         );
       }
 
-      setCards(generatedCards);
-      if (generatedCards.length > 0) setActiveCardId(generatedCards[0].id);
-
-      addChatMessage({
-        role: "ai",
-        text: `Done! Generated ${generatedCards.length} slides. Switch to the Assistant tab for improvement suggestions.`,
-      });
-      setActiveTab("assistant");
-      toast.success("Content generated successfully!");
-
-      let pId = projectId;
-      if (!pId) {
-        pId = crypto.randomUUID();
-        setProjectId(pId);
+      if (cards.length > 0) {
+        setCards([...cards, ...generatedCards]);
+        addChatMessage({
+          role: "ai",
+          text: `Done! Appended ${generatedCards.length} new slides to your existing project. Switch to the Assistant tab for improvement suggestions.`,
+        });
+        toast.success(`Appended ${generatedCards.length} new slides!`);
+      } else {
+        setCards(generatedCards);
+        addChatMessage({
+          role: "ai",
+          text: `Done! Generated ${generatedCards.length} slides. Switch to the Assistant tab for improvement suggestions.`,
+        });
+        toast.success("Content generated successfully!");
       }
-      // Background image generation
+
+      if (generatedCards.length > 0) setActiveCardId(generatedCards[0].id);
+      setActiveTab("assistant");
+
+      // Background image generation using the confirmed projectId
       generateImagesStaggered(
         generatedCards,
         aspectRatio,
         authToken,
         themeSettings.style,
-        pId,
+        projectId,
       );
 
       // Auto-trigger initial assistant review

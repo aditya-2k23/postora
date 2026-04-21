@@ -77,7 +77,7 @@ interface StudioState {
 }
 
 const defaultTheme: ThemeSettings = {
-  primaryColor: "#2563EB",
+  primaryColor: "#6366F1",
   fontSize: 16,
   style: "minimal",
   layoutEngine: "standard",
@@ -229,7 +229,7 @@ export const useStudioStore = create<StudioState>()(
         cards: sanitizePersistedCards(state.cards),
         themeSettings: state.themeSettings,
         chatHistory: state.chatHistory,
-        // Don't persist assistant history — it's session-based
+        assistantHistory: state.assistantHistory,
       }),
     },
   ),

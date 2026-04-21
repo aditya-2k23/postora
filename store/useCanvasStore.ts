@@ -61,69 +61,69 @@ const defaultSlideFromCard = (
   theme: ThemeSettings,
 ): CanvasSlide => {
   const size = getCanvasSize(aspectRatio);
-  const padding = Math.max(32, theme.padding * 2);
-  const headingY = size.height * 0.2;
-  const bodyY = headingY + theme.fontSize * 4.2;
+  const padding = 80;
+  
+  // Professional distribution
+  const titleY = size.height * 0.12;
+  const imageY = size.height * 0.32;
+  const imageWidth = size.width * 0.88;
+  const imageHeight = size.height * 0.45;
+  const bodyY = size.height * 0.82;
 
-  const imageElement: ImageElement = {
+  const elements: SlideElement[] = [];
+
+  // 1. Image (Hero style)
+  if (card.imageUrl) {
+    elements.push({
+      id: uid(),
+      type: "image",
+      src: card.imageUrl,
+      x: (size.width - imageWidth) / 2,
+      y: imageY,
+      width: imageWidth,
+      height: imageHeight,
+      opacity: 1,
+      cornerRadius: 32,
+    });
+  }
+
+  // 2. Title (Centered top)
+  elements.push({
     id: uid(),
-    type: "image",
-    src: card.imageUrl ?? "",
-    x: 0,
-    y: 0,
-    width: size.width,
-    height: size.height,
-    opacity: theme.style === "minimal" ? 0.6 : 0.9,
-    cornerRadius: 0,
-  };
+    type: "text",
+    text: card.title.toUpperCase(),
+    x: padding,
+    y: titleY,
+    width: size.width - padding * 2,
+    fontSize: theme.fontSize * 3.5,
+    fontFamily: "Poppins",
+    fontWeight: "800",
+    fill: "#111827",
+    align: "center",
+    lineHeight: 1.1,
+    letterSpacing: 1,
+  });
+
+  // 3. Body (Centered bottom)
+  elements.push({
+    id: uid(),
+    type: "text",
+    text: card.content,
+    x: padding * 1.5,
+    y: bodyY,
+    width: size.width - padding * 3,
+    fontSize: theme.fontSize * 1.8,
+    fontFamily: "Inter",
+    fontWeight: "500",
+    fill: "#6B7280",
+    align: "center",
+    lineHeight: 1.5,
+  });
 
   return {
     cardId: card.id,
-    backgroundColor: "",
-    elements: [
-      imageElement,
-      {
-        id: uid(),
-        type: "shape",
-        shape: "rect",
-        x: padding,
-        y: padding * 0.7,
-        width: size.width - padding * 2,
-        height: 8,
-        fill: theme.primaryColor,
-        opacity: theme.style === "bold" ? 0.8 : 0.6,
-      },
-      {
-        id: uid(),
-        type: "text",
-        text: card.title,
-        x: padding,
-        y: headingY,
-        width: size.width - padding * 2,
-        fontSize: theme.fontSize * 3,
-        fontFamily: "Poppins",
-        fontWeight: "700",
-        fill: theme.style === "bold" ? "#ffffff" : "#111827",
-        align: theme.layoutEngine === "split" ? "left" : "center",
-        lineHeight: 1.18,
-        letterSpacing: 0.3,
-      },
-      {
-        id: uid(),
-        type: "text",
-        text: card.content,
-        x: padding,
-        y: bodyY,
-        width: size.width - padding * 2,
-        fontSize: theme.fontSize * 1.5,
-        fontFamily: "Inter",
-        fontWeight: "500",
-        fill: theme.style === "bold" ? "#eef2ff" : "#374151",
-        align: "left",
-        lineHeight: 1.4,
-        letterSpacing: 0.1,
-      },
-    ],
+    backgroundColor: "#ffffff",
+    elements,
   };
 };
 

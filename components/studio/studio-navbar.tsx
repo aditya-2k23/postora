@@ -46,6 +46,8 @@ export function StudioNavbar() {
     themeSettings,
     projectId,
     setProjectId,
+    chatHistory,
+    assistantHistory,
   } = useStudioStore(
     useShallow((s) => ({
       cards: s.cards,
@@ -57,6 +59,8 @@ export function StudioNavbar() {
       themeSettings: s.themeSettings,
       projectId: s.projectId,
       setProjectId: s.setProjectId,
+      chatHistory: s.chatHistory,
+      assistantHistory: s.assistantHistory,
     })),
   );
   const { user } = useAuth();
@@ -76,8 +80,15 @@ export function StudioNavbar() {
       router.push("/login");
       return;
     }
-    if (cards.length === 0) {
-      toast.error("Generate some content first.");
+
+    const hasContent =
+      cards.length > 0 ||
+      prompt ||
+      chatHistory.length > 0 ||
+      assistantHistory.length > 0;
+
+    if (!hasContent) {
+      toast.error("Nothing to save yet.");
       return;
     }
 
@@ -105,6 +116,8 @@ export function StudioNavbar() {
         numCards,
         themeSettings,
         cards,
+        chatHistory,
+        assistantHistory,
         canvas: canvasPayload,
         updatedAt: serverTimestamp(),
         ...(projectId ? {} : { createdAt: serverTimestamp() }),
@@ -182,7 +195,13 @@ export function StudioNavbar() {
           variant="ghost"
           size="sm"
           className="h-8 gap-2 px-3 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-full transition-all duration-200"
-          onClick={() => router.push("/projects")}
+          onClick={async () => {
+            // Background save before leaving if possible
+            if (user && (cards.length > 0 || prompt)) {
+              handleSaveProject().catch(() => {});
+            }
+            router.push("/projects");
+          }}
         >
           <LayoutDashboard className="w-4 h-4" />
           <span className="text-xs font-semibold">Go to Projects</span>

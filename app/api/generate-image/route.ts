@@ -461,9 +461,11 @@ export async function POST(req: Request) {
       }
     }
 
-    console.error("Image Generate Error:", error);
+    const rawError = error?.message || "Unknown image generation failure";
+    console.error("[generate-image] Unhandled Error:", rawError);
+    
     return NextResponse.json(
-      { error: error.message || "Failed to generate image" },
+      { error: "Image generation failed. Our specialized image AI service is temporarily unavailable." },
       { status: 500 },
     );
   }

@@ -15,7 +15,7 @@ import {
   ValidationError,
 } from "@/lib/server/ai-security";
 
-const GEMINI_TEXT_MODELS = ["gemini-2.5-flash", "gemini-3.0-flash-preview"];
+const GEMINI_TEXT_MODELS = ["gemini-2.5-flash", "gemini-3-flash-preview"];
 
 const cardSchema = {
   type: Type.ARRAY,
@@ -510,7 +510,7 @@ export async function POST(req: Request) {
           "role": "body",
           "title": "The Brain Deletes Unused Facts",
           "content": "Your brain removes information it thinks you do not need. No review means faster forgetting.",
-          "imagePrompt": "A glowing memory shelf inside a child’s mind with books disappearing one by one, dark background, soft blue lighting, flat illustration style"
+          "imagePrompt": "A glowing memory shelf inside a child's mind with books disappearing one by one, dark background, soft blue lighting, flat illustration style"
         }
       ]
     }
@@ -621,13 +621,24 @@ export async function POST(req: Request) {
     }
 
     // All models exhausted
-    let errorMsg =
-      lastError?.message ||
-      "Content generation failed across all models. Please try again in a minute.";
+    const rawError = lastError?.message || "Unknown exhaustion";
+    console.error(
+      "[generate-content] Generation failed across all models:",
+      rawError,
+    );
 
-    if (errorMsg.toLowerCase().includes("quota") || errorMsg.includes("429")) {
+    let errorMsg =
+      "Content generation is temporarily unavailable. Please try again in a few moments.";
+
+    if (rawError.toLowerCase().includes("quota") || rawError.includes("429")) {
       errorMsg =
         "AI generation is currently experiencing high demand. Please try again in a few moments.";
+    } else if (
+      rawError.toLowerCase().includes("not configured") ||
+      rawError.toLowerCase().includes("not found")
+    ) {
+      errorMsg =
+        "The AI service is currently being updated. Please try again shortly.";
     }
 
     if (idempotencyKey) {
@@ -648,8 +659,10 @@ export async function POST(req: Request) {
     if (authError) return authError;
 
     const db = getFirebaseAdminDb();
-
     const securityError = toAiSecurityErrorResponse(error);
+
+    // Log the unhandled error
+    console.error("[generate-content] Unhandled Error:", error);
     if (securityError) {
       if (uid) {
         await recordAiUsageEvent({
@@ -708,10 +721,9 @@ export async function POST(req: Request) {
       }
     }
 
-    console.error("Content Generate Error:", error);
-    return NextResponse.json(
-      { error: error.message || "Failed to generate content" },
-      { status: 500 },
-    );
+    const finalErrorMsg =
+      "Failed to generate content. Please check your connection and try again.";
+
+    return NextResponse.json({ error: finalErrorMsg }, { status: 500 });
   }
 }
