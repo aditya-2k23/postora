@@ -40,6 +40,7 @@ interface StudioState {
   themeSettings: ThemeSettings;
   isGenerating: boolean;
   projectId: string | null;
+  quotaRemaining: number | null;
 
   // Generation chat history (prompt → carousel)
   chatHistory: ChatMessage[];
@@ -64,6 +65,7 @@ interface StudioState {
   updateTheme: (updates: Partial<ThemeSettings>) => void;
   setIsGenerating: (isGenerating: boolean) => void;
   setProjectId: (id: string | null) => void;
+  setQuotaRemaining: (val: number | null) => void;
   addChatMessage: (message: ChatMessage) => void;
   addAssistantMessage: (message: AssistantMessage) => void;
   setIsAssistantThinking: (v: boolean) => void;
@@ -113,6 +115,7 @@ export const useStudioStore = create<StudioState>()(
       themeSettings: defaultTheme,
       isGenerating: false,
       projectId: null,
+      quotaRemaining: null,
       chatHistory: [],
       assistantHistory: [],
       isAssistantThinking: false,
@@ -152,6 +155,7 @@ export const useStudioStore = create<StudioState>()(
         })),
       setIsGenerating: (isGenerating) => set({ isGenerating }),
       setProjectId: (projectId) => set({ projectId }),
+      setQuotaRemaining: (quotaRemaining) => set({ quotaRemaining }),
 
       addChatMessage: (message) =>
         set((state) => ({
@@ -206,6 +210,7 @@ export const useStudioStore = create<StudioState>()(
           cards: [],
           activeCardId: null,
           projectId: null,
+          quotaRemaining: null,
           chatHistory: [],
           assistantHistory: [],
           isAssistantThinking: false,

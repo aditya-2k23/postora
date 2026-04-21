@@ -1,5 +1,20 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { NextResponse } from "next/server";
+import {
+  requireAuthenticatedUser,
+  toApiAuthErrorResponse,
+} from "@/lib/server/api-auth";
+import { getFirebaseAdminDb } from "@/lib/server/firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
+import {
+  assertDailyQuotaAvailable,
+  consumeDailyQuota,
+  enforceIpRateLimit,
+  getRequestIpHash,
+  recordAiUsageEvent,
+  toAiSecurityErrorResponse,
+  ValidationError,
+} from "@/lib/server/ai-security";
 
 // ---------------------------------------------------------------------------
 // Model fallback chain – ordered from most recommended to legacy
@@ -37,6 +52,83 @@ type NormalizedCard = {
   content: string;
   imagePrompt: string;
 };
+
+type GenerateContentPayload = {
+  prompt: string;
+  tone: string;
+  platform: string;
+  aspectRatio: string;
+  numCards: number;
+};
+
+function validateGenerateContentPayload(
+  payload: unknown,
+): GenerateContentPayload {
+  if (!payload || typeof payload !== "object") {
+    throw new ValidationError("Invalid request payload.");
+  }
+
+  const { prompt, tone, platform, aspectRatio, numCards } = payload as Record<
+    string,
+    unknown
+  >;
+
+  if (typeof prompt !== "string" || !prompt.trim()) {
+    throw new ValidationError("A prompt is required.");
+  }
+
+  const normalizedPrompt = prompt.trim();
+  if (normalizedPrompt.length > 2_000) {
+    throw new ValidationError(
+      "Prompt is too long. Max length is 2000 characters.",
+    );
+  }
+
+  const normalizedTone =
+    typeof tone === "string" && tone.trim() ? tone.trim() : "Professional";
+  if (normalizedTone.length > 80) {
+    throw new ValidationError("Tone is too long. Max length is 80 characters.");
+  }
+
+  const normalizedPlatform =
+    typeof platform === "string" && platform.trim()
+      ? platform.trim()
+      : "Instagram Carousel";
+  if (normalizedPlatform.length > 80) {
+    throw new ValidationError(
+      "Platform is too long. Max length is 80 characters.",
+    );
+  }
+
+  const normalizedAspectRatio =
+    typeof aspectRatio === "string" && aspectRatio.trim()
+      ? aspectRatio.trim()
+      : "4:5";
+  if (normalizedAspectRatio.length > 20) {
+    throw new ValidationError(
+      "Aspect ratio is too long. Max length is 20 characters.",
+    );
+  }
+
+  const parsedCards =
+    typeof numCards === "number"
+      ? numCards
+      : Number.parseInt(String(numCards), 10);
+
+  if (!Number.isInteger(parsedCards) || parsedCards < 2 || parsedCards > 12) {
+    throw new ValidationError(
+      "Number of cards must be an integer between 2 and 12.",
+    );
+  }
+
+  return {
+    prompt: normalizedPrompt,
+    tone: normalizedTone,
+    platform: normalizedPlatform,
+    aspectRatio: normalizedAspectRatio,
+    numCards: parsedCards,
+  };
+}
 
 function normalizeGeneratedCards(payload: unknown): NormalizedCard[] | null {
   const rawCards = Array.isArray(payload)
@@ -78,11 +170,44 @@ function normalizeGeneratedCards(payload: unknown): NormalizedCard[] | null {
 }
 
 export async function POST(req: Request) {
-  try {
-    let key =
-      process.env.GEMINI_API_KEY ||
-      process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
-      "";
+  let uid = "";
+  let requestPromptLength = 0;
+  let requestNumCards = 0;
+  let requestPlatform = "";
+  let selectedModel = "";
+  let ipHash = "";
+  let idempotencyKey = req.headers.get("x-idempotency-key");
+
+    try {
+      const decodedToken = await requireAuthenticatedUser(req);
+      uid = decodedToken.uid;
+      
+      const db = getFirebaseAdminDb();
+      if (idempotencyKey) {
+        const idKeyRef = db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`);
+        const idSnap = await idKeyRef.get();
+        if (idSnap.exists) {
+          const idData = idSnap.data();
+          if (idData?.status === "completed" && idData?.cards) {
+            return NextResponse.json({
+              cards: idData.cards,
+              quotaRemaining: idData.quotaRemaining || 0,
+              idempotent: true
+            });
+          } else if (idData?.status === "pending") {
+            return NextResponse.json(
+              { error: "A request with this idempotency key is already in progress. Please wait." },
+              { status: 409 }
+            );
+          }
+        }
+        await idKeyRef.set({ status: "pending", createdAt: FieldValue.serverTimestamp() });
+      }
+
+      enforceIpRateLimit(req, "generate-content");
+    ipHash = getRequestIpHash(req);
+
+    let key = process.env.GEMINI_API_KEY || "";
     // Clean up accidental quotes or whitespace from the environment variable
     key = key.replace(/['"]/g, "").trim();
 
@@ -94,14 +219,14 @@ export async function POST(req: Request) {
     }
 
     const ai = new GoogleGenAI({ apiKey: key });
-    const { prompt, tone, platform, aspectRatio, numCards } = await req.json();
+    const { prompt, tone, platform, aspectRatio, numCards } =
+      validateGenerateContentPayload(await req.json());
 
-    if (!prompt) {
-      return NextResponse.json(
-        { error: "A prompt is required." },
-        { status: 400 },
-      );
-    }
+    requestPromptLength = prompt.length;
+    requestNumCards = numCards;
+    requestPlatform = platform;
+
+    await assertDailyQuotaAvailable(uid, "generate-content");
 
     const systemInstruction = `
     You are not a chatbot.
@@ -346,6 +471,8 @@ export async function POST(req: Request) {
     for (const model of GEMINI_TEXT_MODELS) {
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
+          selectedModel = model;
+
           const response = await ai.models.generateContent({
             model,
             contents: prompt,
@@ -366,7 +493,33 @@ export async function POST(req: Request) {
             throw new Error("Generator returned invalid cards format");
           }
 
-          return NextResponse.json({ cards });
+          const quota = await consumeDailyQuota(uid, "generate-content");
+
+          await recordAiUsageEvent({
+            uid,
+            endpoint: "generate-content",
+            success: true,
+            inputChars: prompt.length,
+            outputChars: JSON.stringify(cards).length,
+            model,
+            ipHash,
+            metadata: {
+              numCards,
+              platform,
+              quotaRemaining: quota.remaining,
+            },
+          });
+
+          if (idempotencyKey) {
+            await db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`).set({
+              status: "completed",
+              cards,
+              quotaRemaining: quota.remaining,
+              updatedAt: FieldValue.serverTimestamp(),
+            }, { merge: true });
+          }
+
+          return NextResponse.json({ cards, quotaRemaining: quota.remaining });
         } catch (err: any) {
           lastError = err;
           const status = err?.status ?? err?.response?.status;
@@ -398,6 +551,67 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   } catch (error: any) {
+    const authError = toApiAuthErrorResponse(error);
+    if (authError) return authError;
+    
+    const idempotencyKey = req.headers.get("x-idempotency-key");
+    const db = getFirebaseAdminDb();
+
+    const securityError = toAiSecurityErrorResponse(error);
+    if (securityError) {
+      if (uid) {
+        await recordAiUsageEvent({
+          uid,
+          endpoint: "generate-content",
+          success: false,
+          inputChars: requestPromptLength || undefined,
+          model: selectedModel || undefined,
+          ipHash: ipHash || undefined,
+          error: error?.message,
+          metadata: {
+            numCards: requestNumCards || undefined,
+            platform: requestPlatform || undefined,
+            errorType: error?.name || "SecurityError",
+          },
+        });
+      }
+      
+      if (idempotencyKey) {
+          await db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`).set({
+            status: "failed",
+            error: error?.message,
+            updatedAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
+      }
+
+      return securityError;
+    }
+
+    if (uid) {
+      await recordAiUsageEvent({
+        uid,
+        endpoint: "generate-content",
+        success: false,
+        inputChars: requestPromptLength || undefined,
+        model: selectedModel || undefined,
+        ipHash: ipHash || undefined,
+        error: error?.message,
+        metadata: {
+          numCards: requestNumCards || undefined,
+          platform: requestPlatform || undefined,
+          errorType: error?.name || "UnhandledError",
+        },
+      });
+      
+      if (idempotencyKey) {
+          await db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`).set({
+            status: "failed",
+            error: error?.message,
+            updatedAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
+      }
+    }
+
     console.error("Content Generate Error:", error);
     return NextResponse.json(
       { error: error.message || "Failed to generate content" },

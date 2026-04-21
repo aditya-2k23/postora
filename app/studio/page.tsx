@@ -19,7 +19,13 @@ import { CenterCanvas } from "@/components/studio/center-canvas";
 import { RightSidebar } from "@/components/studio/right-sidebar";
 import { SlideManager } from "@/components/studio/slide-manager";
 import { db } from "@/lib/firebase";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  getDocs,
+  serverTimestamp,
+  setDoc,
+} from "firebase/firestore";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -53,6 +59,7 @@ export default function StudioPage() {
   const leftPanelRef = useRef<PanelImperativeHandle | null>(null);
   const rightPanelRef = useRef<PanelImperativeHandle | null>(null);
   const slidesPanelRef = useRef<PanelImperativeHandle | null>(null);
+  const hasReconciledRef = useRef(false);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [slidesCollapsed, setSlidesCollapsed] = useState(false);
@@ -95,6 +102,101 @@ export default function StudioPage() {
 
     return () => window.cancelAnimationFrame(frame);
   }, [cards.length]);
+
+  useEffect(() => {
+    if (
+      !mounted ||
+      !user ||
+      !projectId ||
+      cards.length === 0 ||
+      hasReconciledRef.current
+    )
+      return;
+
+    let needsReconciliation = false;
+    let needsMigration = false;
+    for (const card of cards) {
+      if (!card.imageUrl && card.imagePrompt) {
+        needsReconciliation = true;
+      }
+      if (card.imageUrl && card.imageUrl.startsWith("data:image/")) {
+        needsMigration = true;
+      }
+    }
+
+    if (!needsReconciliation && !needsMigration) {
+      hasReconciledRef.current = true;
+      return;
+    }
+
+    const backfillImages = async () => {
+      try {
+        // 1. Fallback for entirely missing image URLs
+        if (needsReconciliation) {
+          const imagesSnap = await getDocs(
+            collection(db, `users/${user.uid}/projects/${projectId}/images`),
+          );
+
+          imagesSnap.forEach((docSnap) => {
+            const cardId = docSnap.id;
+            const data = docSnap.data();
+            if (data && data.secureUrl) {
+              const card = cards.find((c) => c.id === cardId);
+              if (card && !card.imageUrl) {
+                useStudioStore
+                  .getState()
+                  .updateCard(cardId, { imageUrl: data.secureUrl });
+                useCanvasStore.getState().syncCardImage(cardId, data.secureUrl);
+              }
+            }
+          });
+        }
+
+        // 2. Lazy migration for legacy base64 images
+        if (needsMigration) {
+          const token = await user.getIdToken();
+          for (const card of cards) {
+            if (card.imageUrl && card.imageUrl.startsWith("data:image/")) {
+              try {
+                const res = await fetch("/api/migrate-image", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                  },
+                  body: JSON.stringify({
+                    imageBase64: card.imageUrl,
+                    projectId,
+                    cardId: card.id,
+                  }),
+                });
+
+                if (res.ok) {
+                  const data = await res.json();
+                  if (data.imageUrl) {
+                    useStudioStore
+                      .getState()
+                      .updateCard(card.id, { imageUrl: data.imageUrl });
+                    useCanvasStore
+                      .getState()
+                      .syncCardImage(card.id, data.imageUrl);
+                  }
+                }
+              } catch (e) {
+                console.error("Migration failed for card", card.id, e);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Failed to reconcile/migrate images:", error);
+      } finally {
+        hasReconciledRef.current = true;
+      }
+    };
+
+    backfillImages();
+  }, [mounted, user, projectId, cards]);
 
   useEffect(() => {
     if (!mounted || !user || !projectId || cards.length === 0) return;

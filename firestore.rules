@@ -18,23 +18,37 @@ service cloud.firestore {
 
     function isProject(data, isCreate) {
       let requiredKeys = ['userId', 'prompt', 'platform', 'aspectRatio', 'createdAt', 'updatedAt'];
-      let permittedKeys = ['id', 'userId', 'prompt', 'platform', 'aspectRatio', 'themeSettings', 'cards', 'createdAt', 'updatedAt'];
+      let permittedKeys = ['id', 'userId', 'prompt', 'tone', 'platform', 'aspectRatio', 'numCards', 'themeSettings', 'cards', 'canvas', 'createdAt', 'updatedAt'];
       
       return data.keys().hasAll(requiredKeys)
         && (isCreate ? data.keys().hasOnly(permittedKeys) : true)
         && data.userId == request.auth.uid
         && data.prompt is string && data.prompt.size() <= 5000
+        && (!('tone' in data) || (data.tone is string && data.tone.size() <= 80))
         && data.platform is string && data.platform.size() <= 100
         && data.aspectRatio is string && data.aspectRatio.size() <= 20
+        && (!('numCards' in data) || (data.numCards is int && data.numCards >= 1 && data.numCards <= 20))
         && data.createdAt is timestamp
         && data.updatedAt is timestamp
         && (!('id' in data) || (data.id is string && data.id.size() <= 128))
         && (!('cards' in data) || (data.cards is list && data.cards.size() <= 50))
+        && (!('canvas' in data) || (
+          data.canvas is map
+          && data.canvas.keys().hasOnly(['slidesByCardId', 'currentSlideId', 'activeTool', 'gridEnabled', 'rulerEnabled'])
+          && (!('slidesByCardId' in data.canvas) || data.canvas.slidesByCardId is map)
+          && (!('currentSlideId' in data.canvas) || (data.canvas.currentSlideId is string && data.canvas.currentSlideId.size() <= 128))
+          && (!('activeTool' in data.canvas) || (data.canvas.activeTool is string && data.canvas.activeTool.size() <= 40))
+          && (!('gridEnabled' in data.canvas) || data.canvas.gridEnabled is bool)
+          && (!('rulerEnabled' in data.canvas) || data.canvas.rulerEnabled is bool)
+        ))
         && (!('themeSettings' in data) || (
           data.themeSettings is map 
           && (!('primaryColor' in data.themeSettings) || (data.themeSettings.primaryColor is string && data.themeSettings.primaryColor.size() <= 20))
           && (!('fontSize' in data.themeSettings) || (data.themeSettings.fontSize is number && data.themeSettings.fontSize > 0 && data.themeSettings.fontSize <= 100))
           && (!('style' in data.themeSettings) || (data.themeSettings.style is string && data.themeSettings.style.size() <= 50))
+          && (!('layoutEngine' in data.themeSettings) || (data.themeSettings.layoutEngine is string && data.themeSettings.layoutEngine.size() <= 50))
+          && (!('padding' in data.themeSettings) || (data.themeSettings.padding is number && data.themeSettings.padding >= 0 && data.themeSettings.padding <= 500))
+          && (!('roundness' in data.themeSettings) || (data.themeSettings.roundness is number && data.themeSettings.roundness >= 0 && data.themeSettings.roundness <= 200))
         ));
     }
 
@@ -57,9 +71,24 @@ service cloud.firestore {
         && incoming().createdAt == existing().createdAt
         && incoming().userId == existing().userId
         && incoming().updatedAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasOnly(['prompt', 'platform', 'aspectRatio', 'themeSettings', 'cards', 'updatedAt']);
+        && incoming().diff(existing()).affectedKeys().hasOnly(['prompt', 'tone', 'platform', 'aspectRatio', 'numCards', 'themeSettings', 'cards', 'canvas', 'updatedAt']);
 
       allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+
+      match /images/{cardId} {
+        allow read: if isSignedIn() && request.auth.uid == userId;
+        allow write: if false;
+      }
+    }
+
+    match /users/{userId}/aiUsageDaily/{dateKey} {
+      allow get, list: if isSignedIn() && request.auth.uid == userId;
+      allow create, update, delete: if false;
+    }
+
+    match /users/{userId}/aiEvents/{eventId} {
+      allow get, list: if isSignedIn() && request.auth.uid == userId;
+      allow create, update, delete: if false;
     }
   }
 }

@@ -1,8 +1,177 @@
 import { GoogleGenAI } from "@google/genai";
 import { NextResponse } from "next/server";
+import {
+  requireAuthenticatedUser,
+  toApiAuthErrorResponse,
+} from "@/lib/server/api-auth";
+import {
+  assertDailyQuotaAvailable,
+  consumeDailyQuota,
+  enforceIpRateLimit,
+  getRequestIpHash,
+  recordAiUsageEvent,
+  toAiSecurityErrorResponse,
+  ValidationError,
+} from "@/lib/server/ai-security";
 
 // Model fallback chain
 const GEMINI_TEXT_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+
+type AssistantHistoryItem = {
+  role: "user" | "assistant";
+  text: string;
+};
+
+type AssistantContextCard = {
+  title: string;
+  content: string;
+};
+
+type AssistantPayload = {
+  message: string;
+  history: AssistantHistoryItem[];
+  context: {
+    originalPrompt: string;
+    platform: string;
+    tone: string;
+    aspectRatio: string;
+    cards: AssistantContextCard[];
+  };
+};
+
+function validateAssistantPayload(payload: unknown): AssistantPayload {
+  if (!payload || typeof payload !== "object") {
+    throw new ValidationError("Invalid request payload.");
+  }
+
+  const raw = payload as Record<string, unknown>;
+  const message = raw.message;
+
+  if (typeof message !== "string" || !message.trim()) {
+    throw new ValidationError("A message is required.");
+  }
+
+  const normalizedMessage = message.trim();
+  if (normalizedMessage.length > 2_000) {
+    throw new ValidationError(
+      "Message is too long. Max length is 2000 characters.",
+    );
+  }
+
+  const context = raw.context;
+  if (!context || typeof context !== "object") {
+    throw new ValidationError(
+      "Generated cards context is required for the assistant.",
+    );
+  }
+
+  const contextObj = context as Record<string, unknown>;
+  const cardsRaw = contextObj.cards;
+  if (!Array.isArray(cardsRaw) || cardsRaw.length === 0) {
+    throw new ValidationError(
+      "Generated cards context is required for the assistant.",
+    );
+  }
+
+  if (cardsRaw.length > 20) {
+    throw new ValidationError("Too many cards provided. Max is 20.");
+  }
+
+  const cards = cardsRaw.map((card, index) => {
+    if (!card || typeof card !== "object") {
+      throw new ValidationError(`Card ${index + 1} is invalid.`);
+    }
+
+    const cardObj = card as Record<string, unknown>;
+    const title = typeof cardObj.title === "string" ? cardObj.title.trim() : "";
+    const content =
+      typeof cardObj.content === "string" ? cardObj.content.trim() : "";
+
+    if (!title || !content) {
+      throw new ValidationError(
+        `Card ${index + 1} must include title and content.`,
+      );
+    }
+
+    if (title.length > 200 || content.length > 2_000) {
+      throw new ValidationError(`Card ${index + 1} text is too long.`);
+    }
+
+    return { title, content };
+  });
+
+  const historyRaw = raw.history;
+  const history: AssistantHistoryItem[] = [];
+
+  if (historyRaw != null) {
+    if (!Array.isArray(historyRaw)) {
+      throw new ValidationError("Conversation history must be an array.");
+    }
+
+    if (historyRaw.length > 20) {
+      throw new ValidationError(
+        "Conversation history is too long. Max 20 messages.",
+      );
+    }
+
+    for (const entry of historyRaw) {
+      if (!entry || typeof entry !== "object") {
+        throw new ValidationError("History contains an invalid entry.");
+      }
+
+      const entryObj = entry as Record<string, unknown>;
+      const role = entryObj.role;
+      const text = entryObj.text;
+
+      if (
+        (role !== "user" && role !== "assistant") ||
+        typeof text !== "string"
+      ) {
+        throw new ValidationError(
+          "History contains an invalid role or message.",
+        );
+      }
+
+      const normalizedText = text.trim();
+      if (!normalizedText || normalizedText.length > 2_000) {
+        throw new ValidationError(
+          "History message length must be between 1 and 2000.",
+        );
+      }
+
+      history.push({ role, text: normalizedText });
+    }
+  }
+
+  const normalizedOriginalPrompt =
+    typeof contextObj.originalPrompt === "string"
+      ? contextObj.originalPrompt.trim().slice(0, 2_000)
+      : "";
+  const normalizedPlatform =
+    typeof contextObj.platform === "string" && contextObj.platform.trim()
+      ? contextObj.platform.trim().slice(0, 80)
+      : "Instagram Carousel";
+  const normalizedTone =
+    typeof contextObj.tone === "string" && contextObj.tone.trim()
+      ? contextObj.tone.trim().slice(0, 80)
+      : "Professional";
+  const normalizedAspectRatio =
+    typeof contextObj.aspectRatio === "string" && contextObj.aspectRatio.trim()
+      ? contextObj.aspectRatio.trim().slice(0, 20)
+      : "4:5";
+
+  return {
+    message: normalizedMessage,
+    history,
+    context: {
+      originalPrompt: normalizedOriginalPrompt,
+      platform: normalizedPlatform,
+      tone: normalizedTone,
+      aspectRatio: normalizedAspectRatio,
+      cards,
+    },
+  };
+}
 
 // Assistant system instruction — creative post coach persona
 function buildAssistantSystemInstruction(context: {
@@ -106,11 +275,21 @@ function buildAssistantSystemInstruction(context: {
 
 // POST handler
 export async function POST(req: Request) {
+  let uid = "";
+  let messageLength = 0;
+  let historyCount = 0;
+  let cardsCount = 0;
+  let selectedModel = "";
+  let ipHash = "";
+
   try {
-    let key =
-      process.env.GEMINI_API_KEY ||
-      process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
-      "";
+    const decodedToken = await requireAuthenticatedUser(req);
+    uid = decodedToken.uid;
+
+    enforceIpRateLimit(req, "assistant-chat");
+    ipHash = getRequestIpHash(req);
+
+    let key = process.env.GEMINI_API_KEY || "";
     key = key.replace(/['"]/g, "").trim();
 
     if (!key) {
@@ -122,28 +301,14 @@ export async function POST(req: Request) {
 
     const ai = new GoogleGenAI({ apiKey: key });
 
-    const body = await req.json();
-    const { message, context } = body;
+    const body = validateAssistantPayload(await req.json());
+    const { message, context, history } = body;
 
-    // Validate inputs
-    if (!message || typeof message !== "string" || !message.trim()) {
-      return NextResponse.json(
-        { error: "A message is required." },
-        { status: 400 },
-      );
-    }
+    messageLength = message.length;
+    historyCount = history.length;
+    cardsCount = context.cards.length;
 
-    if (
-      !context ||
-      !context.cards ||
-      !Array.isArray(context.cards) ||
-      context.cards.length === 0
-    ) {
-      return NextResponse.json(
-        { error: "Generated cards context is required for the assistant." },
-        { status: 400 },
-      );
-    }
+    await assertDailyQuotaAvailable(uid, "assistant-chat");
 
     const {
       originalPrompt = "",
@@ -157,8 +322,8 @@ export async function POST(req: Request) {
     const conversationHistory: { role: string; text: string }[] = [];
 
     // Include prior messages if provided (for multi-turn)
-    if (body.history && Array.isArray(body.history)) {
-      for (const h of body.history) {
+    if (history.length > 0) {
+      for (const h of history) {
         if (h.role === "user") {
           conversationHistory.push({ role: "user", text: h.text });
         } else if (h.role === "assistant") {
@@ -186,6 +351,8 @@ export async function POST(req: Request) {
     for (const model of GEMINI_TEXT_MODELS) {
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
+          selectedModel = model;
+
           const response = await ai.models.generateContent({
             model,
             contents: conversationHistory.map((m) => ({
@@ -202,7 +369,26 @@ export async function POST(req: Request) {
           const text = response.text;
           if (!text) throw new Error("Empty response from assistant");
 
-          return NextResponse.json({ reply: text.trim() });
+          const reply = text.trim();
+          const quota = await consumeDailyQuota(uid, "assistant-chat");
+
+          await recordAiUsageEvent({
+            uid,
+            endpoint: "assistant-chat",
+            success: true,
+            inputChars: message.length,
+            outputChars: reply.length,
+            model,
+            ipHash,
+            metadata: {
+              historyCount: history.length,
+              cardsCount: context.cards.length,
+              platform,
+              quotaRemaining: quota.remaining,
+            },
+          });
+
+          return NextResponse.json({ reply, quotaRemaining: quota.remaining });
         } catch (err: any) {
           lastError = err;
           const status = err?.status ?? err?.response?.status;
@@ -233,6 +419,48 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   } catch (error: any) {
+    const authError = toApiAuthErrorResponse(error);
+    if (authError) return authError;
+
+    const securityError = toAiSecurityErrorResponse(error);
+    if (securityError) {
+      if (uid) {
+        await recordAiUsageEvent({
+          uid,
+          endpoint: "assistant-chat",
+          success: false,
+          inputChars: messageLength || undefined,
+          model: selectedModel || undefined,
+          ipHash: ipHash || undefined,
+          error: error?.message,
+          metadata: {
+            historyCount: historyCount || undefined,
+            cardsCount: cardsCount || undefined,
+            errorType: error?.name || "SecurityError",
+          },
+        });
+      }
+
+      return securityError;
+    }
+
+    if (uid) {
+      await recordAiUsageEvent({
+        uid,
+        endpoint: "assistant-chat",
+        success: false,
+        inputChars: messageLength || undefined,
+        model: selectedModel || undefined,
+        ipHash: ipHash || undefined,
+        error: error?.message,
+        metadata: {
+          historyCount: historyCount || undefined,
+          cardsCount: cardsCount || undefined,
+          errorType: error?.name || "UnhandledError",
+        },
+      });
+    }
+
     console.error("Assistant Chat Error:", error);
     return NextResponse.json(
       { error: error.message || "Failed to get assistant response" },

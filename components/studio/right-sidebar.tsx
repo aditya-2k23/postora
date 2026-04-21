@@ -6,8 +6,13 @@ import { LayoutTemplate } from "lucide-react";
 import { CanvasSidebar } from "@/components/editor/CanvasSidebar";
 import { useCanvasStore } from "@/store/useCanvasStore";
 import { useStudioStore } from "@/store/useStudioStore";
+import { useAuth } from "@/components/auth-provider";
+import { useRouter } from "next/navigation";
 
 export function RightSidebar() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
   const { cards, activeCardId, aspectRatio, updateCard } = useStudioStore();
   const {
     slidesByCardId,
@@ -28,6 +33,19 @@ export function RightSidebar() {
   const slideId = currentSlideId ?? activeCardId;
   const slide = slideId ? slidesByCardId[slideId] : undefined;
   const currentCard = cards.find((card) => card.id === slideId);
+
+  const requireAiToken = async () => {
+    if (loading) {
+      throw new Error("Checking sign-in status. Please try again in a moment.");
+    }
+
+    if (!user) {
+      router.push("/login");
+      throw new Error("Please sign in to use AI features.");
+    }
+
+    return user.getIdToken();
+  };
 
   if (!slide) {
     return (
@@ -108,18 +126,39 @@ export function RightSidebar() {
         onRegenerateImage={async () => {
           if (!currentCard?.imagePrompt || !currentCard?.id) return;
           try {
+            const authToken = await requireAiToken();
+
             const res = await fetch("/api/generate-image", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${authToken}`,
+                "x-idempotency-key": crypto.randomUUID(),
+              },
               body: JSON.stringify({
                 prompt: currentCard.imagePrompt,
                 aspectRatio,
+                style: useStudioStore.getState().themeSettings.style,
+                projectId: useStudioStore.getState().projectId,
+                cardId: currentCard.id,
               }),
             });
             const data = await res.json();
-            if (!res.ok || !data.imageUrl) {
+            
+            if (!res.ok) {
+              if (res.status === 429) {
+                 throw new Error(data.errorType === "RateLimitExceeded" ? "Too many requests. Please slow down and try again." : "You've reached your daily AI limit. Please come back tomorrow.");
+              }
               throw new Error(data.error || "Failed to regenerate image");
             }
+            if (!data.imageUrl) {
+               throw new Error("Failed to regenerate image");
+            }
+            
+            if (data.quotaRemaining !== undefined) {
+               useStudioStore.getState().setQuotaRemaining(data.quotaRemaining);
+            }
+
             updateCard(currentCard.id, { imageUrl: data.imageUrl });
             toast.success("Image regenerated");
           } catch (error: unknown) {

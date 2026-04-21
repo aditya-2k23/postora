@@ -31,6 +31,8 @@ import { Slider } from "@/components/ui/slider";
 import { toast } from "sonner";
 import { useEffect, useRef, useState } from "react";
 import TextareaAutosize from "react-textarea-autosize";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/auth-provider";
 
 const TONES = [
   "Professional",
@@ -95,6 +97,9 @@ const ASSISTANT_PROMPTS = [
 type SidebarTab = "generate" | "assistant";
 
 export function LeftSidebar() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
   const {
     prompt,
     setPrompt,
@@ -109,6 +114,8 @@ export function LeftSidebar() {
     cards,
     setCards,
     setActiveCardId,
+    projectId,
+    setProjectId,
     isGenerating,
     setIsGenerating,
     chatHistory,
@@ -120,12 +127,27 @@ export function LeftSidebar() {
     clearAssistantHistory,
     pushUndo,
     themeSettings,
+    quotaRemaining,
+    setQuotaRemaining,
   } = useStudioStore();
 
   const [activeTab, setActiveTab] = useState<SidebarTab>("generate");
   const [inputValue, setInputValue] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
   const assistantEndRef = useRef<HTMLDivElement>(null);
+
+  const requireAiToken = async () => {
+    if (loading) {
+      throw new Error("Checking sign-in status. Please try again in a moment.");
+    }
+
+    if (!user) {
+      router.push("/login");
+      throw new Error("Please sign in to use AI features.");
+    }
+
+    return user.getIdToken();
+  };
 
   // Auto-scroll chat
   useEffect(() => {
@@ -145,6 +167,14 @@ export function LeftSidebar() {
       return;
     }
 
+    let authToken = "";
+    try {
+      authToken = await requireAiToken();
+    } catch (error: any) {
+      toast.error(error.message);
+      return;
+    }
+
     addChatMessage({ role: "user", text });
     setPrompt(text);
     setInputValue("");
@@ -157,9 +187,14 @@ export function LeftSidebar() {
         text: `Drafting carousel based on "${text.slice(0, 50)}${text.length > 50 ? "..." : ""}"...`,
       });
 
+      const idempotencyKey = crypto.randomUUID();
       const res = await fetch("/api/generate-content", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+          "x-idempotency-key": idempotencyKey,
+        },
         body: JSON.stringify({
           prompt: text,
           tone,
@@ -170,7 +205,20 @@ export function LeftSidebar() {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to generate");
+      if (!res.ok) {
+        if (res.status === 429) {
+          throw new Error(
+            data.errorType === "RateLimitExceeded"
+              ? "Too many requests. Please slow down and try again."
+              : "You've reached your daily AI limit. Thanks for using Postora! Please come back tomorrow for more.",
+          );
+        }
+        throw new Error(data.error || "Failed to generate");
+      }
+
+      if (data.quotaRemaining !== undefined) {
+        setQuotaRemaining(data.quotaRemaining);
+      }
 
       pushUndo();
 
@@ -213,11 +261,22 @@ export function LeftSidebar() {
       setActiveTab("assistant");
       toast.success("Content generated successfully!");
 
+      let pId = projectId;
+      if (!pId) {
+        pId = crypto.randomUUID();
+        setProjectId(pId);
+      }
       // Background image generation
-      generateImagesStaggered(generatedCards, aspectRatio);
+      generateImagesStaggered(
+        generatedCards,
+        aspectRatio,
+        authToken,
+        themeSettings.style,
+        pId,
+      );
 
       // Auto-trigger initial assistant review
-      triggerAutoReview(text, generatedCards);
+      triggerAutoReview(text, generatedCards, authToken);
     } catch (error: any) {
       addChatMessage({ role: "ai", text: `Error: ${error.message}` });
       toast.error(error.message);
@@ -229,20 +288,36 @@ export function LeftSidebar() {
   const generateImagesStaggered = async (
     cardsToProcess: any[],
     ratio: string,
+    authToken: string,
+    style: string,
+    pId: string,
   ) => {
     for (let i = 0; i < cardsToProcess.length; i++) {
       const c = cardsToProcess[i];
       try {
         const res = await fetch("/api/generate-image", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: c.imagePrompt, aspectRatio: ratio }),
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+            "x-idempotency-key": `img-${c.id}-${Date.now()}`,
+          },
+          body: JSON.stringify({
+            prompt: c.imagePrompt,
+            aspectRatio: ratio,
+            style,
+            projectId: pId,
+            cardId: c.id,
+          }),
         });
         const data = await res.json();
         if (res.ok && data.imageUrl) {
           useStudioStore
             .getState()
             .updateCard(c.id, { imageUrl: data.imageUrl });
+          if (data.quotaRemaining !== undefined) {
+            useStudioStore.getState().setQuotaRemaining(data.quotaRemaining);
+          }
         }
       } catch (e) {
         console.error(`[Image ${i + 1}/${cardsToProcess.length}] failed:`, e);
@@ -258,12 +333,16 @@ export function LeftSidebar() {
   const triggerAutoReview = async (
     originalPrompt: string,
     generatedCards: any[],
+    authToken: string,
   ) => {
     setIsAssistantThinking(true);
     try {
       const res = await fetch("/api/assistant-chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
         body: JSON.stringify({
           message:
             "I just generated this carousel. Give me a quick review — what's working and what could be better?",
@@ -280,6 +359,9 @@ export function LeftSidebar() {
       const data = await res.json();
       if (res.ok && data.reply) {
         addAssistantMessage({ role: "assistant", text: data.reply });
+        if (data.quotaRemaining !== undefined) {
+          setQuotaRemaining(data.quotaRemaining);
+        }
       }
     } catch (e) {
       console.error("[Auto-review] failed:", e);
@@ -299,6 +381,14 @@ export function LeftSidebar() {
       return;
     }
 
+    let authToken = "";
+    try {
+      authToken = await requireAiToken();
+    } catch (error: any) {
+      toast.error(error.message);
+      return;
+    }
+
     addAssistantMessage({ role: "user", text });
     setInputValue("");
     setIsAssistantThinking(true);
@@ -313,7 +403,10 @@ export function LeftSidebar() {
 
       const res = await fetch("/api/assistant-chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
         body: JSON.stringify({
           message: text,
           history: historyForApi,
@@ -331,7 +424,20 @@ export function LeftSidebar() {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Assistant failed");
+      if (!res.ok) {
+        if (res.status === 429) {
+          throw new Error(
+            data.errorType === "RateLimitExceeded"
+              ? "Too many requests. Please slow down and try again."
+              : "You've reached your daily AI limit. Please come back tomorrow.",
+          );
+        }
+        throw new Error(data.error || "Assistant failed");
+      }
+
+      if (data.quotaRemaining !== undefined) {
+        setQuotaRemaining(data.quotaRemaining);
+      }
 
       addAssistantMessage({ role: "assistant", text: data.reply });
     } catch (error: any) {
@@ -459,7 +565,7 @@ export function LeftSidebar() {
                   </div>
                   <Slider
                     value={[numCards]}
-                    min={1}
+                    min={2}
                     max={12}
                     step={1}
                     onValueChange={(val) =>
@@ -594,6 +700,16 @@ export function LeftSidebar() {
                 )}
               </Button>
             </div>
+            {quotaRemaining !== null && (
+              <div className="text-[10px] text-muted-foreground mt-1 flex items-center justify-between">
+                <span>Daily AI Quota:</span>
+                <span
+                  className={`font-medium ${quotaRemaining === 0 ? "text-red-500" : "text-foreground"}`}
+                >
+                  {quotaRemaining} left
+                </span>
+              </div>
+            )}
 
             {/* Quick Templates */}
             <div>
@@ -723,6 +839,16 @@ export function LeftSidebar() {
                 )}
               </Button>
             </div>
+            {quotaRemaining !== null && (
+              <div className="text-[10px] text-muted-foreground mt-1 flex items-center justify-between">
+                <span>Daily AI Quota:</span>
+                <span
+                  className={`font-medium ${quotaRemaining === 0 ? "text-red-500" : "text-foreground"}`}
+                >
+                  {quotaRemaining} left
+                </span>
+              </div>
+            )}
 
             {/* Quick Assistant Prompts */}
             {hasCards && (

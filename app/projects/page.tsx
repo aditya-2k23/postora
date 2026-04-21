@@ -19,8 +19,10 @@ export default function ProjectsPage() {
 
   const setProjectId = useStudioStore((s) => s.setProjectId);
   const setPrompt = useStudioStore((s) => s.setPrompt);
+  const setTone = useStudioStore((s) => s.setTone);
   const setPlatform = useStudioStore((s) => s.setPlatform);
   const setAspectRatio = useStudioStore((s) => s.setAspectRatio);
+  const setNumCards = useStudioStore((s) => s.setNumCards);
   const updateTheme = useStudioStore((s) => s.updateTheme);
   const setCards = useStudioStore((s) => s.setCards);
   const setActiveCardId = useStudioStore((s) => s.setActiveCardId);
@@ -29,8 +31,10 @@ export default function ProjectsPage() {
     (projectData: any) => {
       setProjectId(projectData.id);
       setPrompt(projectData.prompt);
+      setTone(projectData.tone || "Professional");
       setPlatform(projectData.platform);
       setAspectRatio(projectData.aspectRatio);
+      setNumCards(projectData.numCards || projectData.cards?.length || 5);
       if (projectData.themeSettings) updateTheme(projectData.themeSettings);
       if (projectData.cards) setCards(projectData.cards);
       const preferredSlideId =
@@ -62,9 +66,11 @@ export default function ProjectsPage() {
       setActiveCardId,
       setAspectRatio,
       setCards,
+      setNumCards,
       setPlatform,
       setProjectId,
       setPrompt,
+      setTone,
       updateTheme,
     ],
   );

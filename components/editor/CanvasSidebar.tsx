@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Plus, Replace, WandSparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { SlideElement } from "@/types/canvas";
@@ -62,10 +61,6 @@ export function CanvasSidebar({
     selectedElements.length > 1 &&
     selectedElements.every((el) => el.type === selectedElements[0].type);
 
-  const [fontSizeInput, setFontSizeInput] = useState("");
-  const [lineHeightInput, setLineHeightInput] = useState("");
-  const [letterSpacingInput, setLetterSpacingInput] = useState("");
-
   const applyStyleUpdate = (updates: Partial<SlideElement>) => {
     if (!selected) return;
     onUpdateElement(
@@ -90,52 +85,39 @@ export function CanvasSidebar({
     return Number.isFinite(parsed) ? parsed : null;
   };
 
-  useEffect(() => {
-    if (!selectedText) {
-      setFontSizeInput("");
-      setLineHeightInput("");
-      setLetterSpacingInput("");
-      return;
-    }
-
-    setFontSizeInput(String(selectedText.fontSize));
-    setLineHeightInput(String(selectedText.lineHeight ?? 1.3));
-    setLetterSpacingInput(String(selectedText.letterSpacing ?? 0));
-  }, [selectedText?.id]);
-
-  const commitFontSize = () => {
+  const commitFontSize = (value: string, inputEl: HTMLInputElement) => {
     if (!selectedText) return;
-    const parsed = parseNumericInput(fontSizeInput);
+    const parsed = parseNumericInput(value);
     if (parsed === null) {
-      setFontSizeInput(String(selectedText.fontSize));
+      inputEl.value = String(selectedText.fontSize);
       return;
     }
     applyStyleUpdate({ fontSize: parsed });
-    setFontSizeInput(String(parsed));
+    inputEl.value = String(parsed);
   };
 
-  const commitLineHeight = () => {
+  const commitLineHeight = (value: string, inputEl: HTMLInputElement) => {
     if (!selectedText) return;
-    const parsed = parseNumericInput(lineHeightInput);
+    const parsed = parseNumericInput(value);
     const fallback = selectedText.lineHeight ?? 1.3;
     if (parsed === null) {
-      setLineHeightInput(String(fallback));
+      inputEl.value = String(fallback);
       return;
     }
     applyStyleUpdate({ lineHeight: parsed });
-    setLineHeightInput(String(parsed));
+    inputEl.value = String(parsed);
   };
 
-  const commitLetterSpacing = () => {
+  const commitLetterSpacing = (value: string, inputEl: HTMLInputElement) => {
     if (!selectedText) return;
-    const parsed = parseNumericInput(letterSpacingInput);
+    const parsed = parseNumericInput(value);
     const fallback = selectedText.letterSpacing ?? 0;
     if (parsed === null) {
-      setLetterSpacingInput(String(fallback));
+      inputEl.value = String(fallback);
       return;
     }
     applyStyleUpdate({ letterSpacing: parsed });
-    setLetterSpacingInput(String(parsed));
+    inputEl.value = String(parsed);
   };
 
   const isDefaultBackground = backgroundColor.trim().length === 0;
@@ -332,14 +314,16 @@ export function CanvasSidebar({
               ))}
             </select>
             <input
+              key={`${selected.id}-font-size`}
               type="number"
-              value={fontSizeInput}
-              onChange={(evt) => setFontSizeInput(evt.target.value)}
-              onBlur={commitFontSize}
+              defaultValue={selected.fontSize}
+              onBlur={(evt) =>
+                commitFontSize(evt.currentTarget.value, evt.currentTarget)
+              }
               onKeyDown={(evt) => {
                 if (evt.key === "Enter") {
                   evt.preventDefault();
-                  commitFontSize();
+                  commitFontSize(evt.currentTarget.value, evt.currentTarget);
                 }
               }}
               className="h-8 rounded-md border border-border bg-background text-xs px-2"
@@ -364,29 +348,36 @@ export function CanvasSidebar({
               <option value="right">Right</option>
             </select>
             <input
+              key={`${selected.id}-line-height`}
               type="number"
               step="0.05"
-              value={lineHeightInput}
-              onChange={(evt) => setLineHeightInput(evt.target.value)}
-              onBlur={commitLineHeight}
+              defaultValue={selected.lineHeight ?? 1.3}
+              onBlur={(evt) =>
+                commitLineHeight(evt.currentTarget.value, evt.currentTarget)
+              }
               onKeyDown={(evt) => {
                 if (evt.key === "Enter") {
                   evt.preventDefault();
-                  commitLineHeight();
+                  commitLineHeight(evt.currentTarget.value, evt.currentTarget);
                 }
               }}
               className="h-8 rounded-md border border-border bg-background text-xs px-2"
             />
             <input
+              key={`${selected.id}-letter-spacing`}
               type="number"
               step="0.1"
-              value={letterSpacingInput}
-              onChange={(evt) => setLetterSpacingInput(evt.target.value)}
-              onBlur={commitLetterSpacing}
+              defaultValue={selected.letterSpacing ?? 0}
+              onBlur={(evt) =>
+                commitLetterSpacing(evt.currentTarget.value, evt.currentTarget)
+              }
               onKeyDown={(evt) => {
                 if (evt.key === "Enter") {
                   evt.preventDefault();
-                  commitLetterSpacing();
+                  commitLetterSpacing(
+                    evt.currentTarget.value,
+                    evt.currentTarget,
+                  );
                 }
               }}
               className="h-8 rounded-md border border-border bg-background text-xs px-2"

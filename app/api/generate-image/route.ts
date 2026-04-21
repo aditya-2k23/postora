@@ -1,5 +1,46 @@
 import { InferenceClient } from "@huggingface/inference";
 import { NextResponse } from "next/server";
+import { createHash } from "crypto";
+import { v2 as cloudinary } from "cloudinary";
+import { getFirebaseAdminDb } from "@/lib/server/firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+async function uploadToCloudinary(
+  blobArrayBuffer: ArrayBuffer,
+  uid: string,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      { folder: `postora_images/${uid}` },
+      (error, result) => {
+        if (error) reject(error);
+        else if (result) resolve(result.secure_url);
+        else reject(new Error("Unknown cloudinary upload error"));
+      },
+    );
+    uploadStream.end(Buffer.from(blobArrayBuffer));
+  });
+}
+import {
+  requireAuthenticatedUser,
+  toApiAuthErrorResponse,
+} from "@/lib/server/api-auth";
+import {
+  assertDailyQuotaAvailable,
+  consumeDailyQuota,
+  enforceIpRateLimit,
+  getRequestIpHash,
+  QuotaExceededError,
+  recordAiUsageEvent,
+  toAiSecurityErrorResponse,
+  ValidationError,
+} from "@/lib/server/ai-security";
 
 const HUGGING_FACE_IMAGE_MODELS = [
   "black-forest-labs/FLUX.1-schnell",
@@ -8,13 +49,57 @@ const HUGGING_FACE_IMAGE_MODELS = [
 ];
 
 function getHuggingFaceToken(): string {
-  return (process.env.HUGGINGFACE_API_KEY || "").replace(/['"]/g, "").trim();
+  return (
+    process.env.HUGGINGFACE_API_KEY ||
+    process.env.HUGGING_FACE_API_KEY ||
+    process.env.HF_TOKEN ||
+    process.env.HUGGINGFACEHUB_API_TOKEN ||
+    process.env.HF_API_TOKEN ||
+    ""
+  )
+    .replace(/['"]/g, "")
+    .trim();
+}
+
+type ImagePayload = {
+  prompt: string;
+  aspectRatio: string;
+  style: string;
+  projectId: string;
+  cardId: string;
+};
+
+function validateImagePayload(payload: unknown): ImagePayload {
+  if (!payload || typeof payload !== "object") {
+    throw new ValidationError("Invalid request payload.");
+  }
+
+  const raw = payload as Record<string, unknown>;
+  const prompt = raw.prompt;
+  if (typeof prompt !== "string" || !prompt.trim()) {
+    throw new ValidationError("Image prompt is required.");
+  }
+
+  const normalizedPrompt = prompt.trim();
+  if (normalizedPrompt.length > 1_200) {
+    throw new ValidationError(
+      "Image prompt is too long. Max length is 1200 characters.",
+    );
+  }
+
+  return {
+    prompt: normalizedPrompt,
+    aspectRatio: typeof raw.aspectRatio === "string" ? raw.aspectRatio : "4:5",
+    style: typeof raw.style === "string" ? raw.style : "minimal",
+    projectId: typeof raw.projectId === "string" ? raw.projectId : "",
+    cardId: typeof raw.cardId === "string" ? raw.cardId : "",
+  };
 }
 
 async function generateWithHuggingFace(
   prompt: string,
   hfKey: string,
-): Promise<string | null> {
+): Promise<{ buffer: ArrayBuffer; model: string } | null> {
   const client = new InferenceClient(hfKey);
 
   for (const model of HUGGING_FACE_IMAGE_MODELS) {
@@ -30,18 +115,19 @@ async function generateWithHuggingFace(
         },
       );
 
-      const contentType = imageBlob.type || "image/png";
       const blob = await imageBlob.arrayBuffer();
-      const base64 = Buffer.from(blob).toString("base64");
 
-      if (!base64) {
+      if (!blob || blob.byteLength === 0) {
         console.warn(
           `[generate-image] Hugging Face ${model} returned empty image data`,
         );
         continue;
       }
 
-      return `data:${contentType};base64,${base64}`;
+      return {
+        buffer: blob,
+        model,
+      };
     } catch (error: any) {
       console.warn(
         `[generate-image] Hugging Face ${model} failed:`,
@@ -55,40 +141,220 @@ async function generateWithHuggingFace(
 
 // POST handler
 export async function POST(req: Request) {
+  let uid = "";
+  let promptLength = 0;
+  let selectedModel = "";
+  let ipHash = "";
+  let idempotencyKey = req.headers.get("x-idempotency-key");
+
   try {
-    const { prompt } = await req.json();
-    const hfKey = getHuggingFaceToken();
+    const decodedToken = await requireAuthenticatedUser(req);
+    uid = decodedToken.uid;
 
-    if (!prompt) {
-      return NextResponse.json(
-        { error: "Image prompt is required" },
-        { status: 400 },
-      );
+    enforceIpRateLimit(req, "generate-image");
+    ipHash = getRequestIpHash(req);
+
+    const db = getFirebaseAdminDb();
+
+    if (idempotencyKey) {
+      const idKeyRef = db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`);
+      const idSnap = await idKeyRef.get();
+      if (idSnap.exists) {
+        const idData = idSnap.data();
+        if (idData?.status === "completed" && idData?.secureUrl) {
+          return NextResponse.json({
+            imageUrl: idData.secureUrl,
+            quotaRemaining: idData.quotaRemaining || 0,
+            idempotent: true,
+          });
+        } else if (idData?.status === "pending") {
+          return NextResponse.json(
+            {
+              error:
+                "A request with this idempotency key is already in progress. Please wait.",
+            },
+            { status: 409 },
+          );
+        }
+      }
+
+      // Mark as pending
+      await idKeyRef.set({
+        status: "pending",
+        createdAt: FieldValue.serverTimestamp(),
+      });
     }
 
-    if (!hfKey) {
-      return NextResponse.json(
-        {
-          error:
-            "Hugging Face token is missing. Add HUGGINGFACE_API_KEY (or HUGGING_FACE_API_KEY / HF_TOKEN) to your .env file to enable image generation.",
+    const { prompt, aspectRatio, style, projectId, cardId } =
+      validateImagePayload(await req.json());
+    promptLength = prompt.length;
+
+    const promptHash = createHash("sha256")
+      .update(`${prompt}|${aspectRatio}|${style}`)
+      .digest("hex");
+
+    const cacheRef = db.doc(`users/${uid}/generatedImagesCache/${promptHash}`);
+    const cacheSnap = await cacheRef.get();
+
+    let secureUrl = "";
+    let quotaRemaining = 0;
+
+    if (cacheSnap.exists && cacheSnap.data()?.secureUrl) {
+      secureUrl = cacheSnap.data()!.secureUrl;
+      selectedModel = cacheSnap.data()!.providerModel || "cache";
+
+      try {
+        const quotaStatus = await assertDailyQuotaAvailable(
+          uid,
+          "generate-image",
+        );
+        quotaRemaining = quotaStatus.remaining;
+      } catch (error) {
+        if (error instanceof QuotaExceededError) {
+          // Cache hit should still be allowed even after the user has exhausted new-generation quota.
+          quotaRemaining = 0;
+        } else {
+          throw error;
+        }
+      }
+    } else {
+      await assertDailyQuotaAvailable(uid, "generate-image");
+
+      const hfKey = getHuggingFaceToken();
+      if (!hfKey) {
+        return NextResponse.json(
+          {
+            error:
+              "Hugging Face token is missing. Add HUGGINGFACE_API_KEY to your .env file to enable image generation.",
+          },
+          { status: 500 },
+        );
+      }
+
+      const hfResult = await generateWithHuggingFace(prompt, hfKey);
+      if (!hfResult) {
+        return NextResponse.json(
+          {
+            error:
+              "All configured Hugging Face image models failed for this request.",
+          },
+          { status: 503 },
+        );
+      }
+
+      selectedModel = hfResult.model;
+      secureUrl = await uploadToCloudinary(hfResult.buffer, uid);
+
+      const quota = await consumeDailyQuota(uid, "generate-image");
+      quotaRemaining = quota.remaining;
+
+      await recordAiUsageEvent({
+        uid,
+        endpoint: "generate-image",
+        success: true,
+        inputChars: prompt.length,
+        model: selectedModel,
+        ipHash,
+        metadata: {
+          quotaRemaining,
         },
-        { status: 500 },
+      });
+
+      await cacheRef.set({
+        prompt,
+        aspectRatio,
+        style,
+        promptHash,
+        secureUrl,
+        providerModel: selectedModel,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    }
+
+    if (projectId && cardId) {
+      const metadataRef = db.doc(
+        `users/${uid}/projects/${projectId}/images/${cardId}`,
+      );
+      await metadataRef.set(
+        {
+          promptHash,
+          providerModel: selectedModel,
+          secureUrl,
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
       );
     }
 
-    const hfUrl = await generateWithHuggingFace(prompt, hfKey);
-    if (hfUrl) {
-      return NextResponse.json({ imageUrl: hfUrl });
+    if (idempotencyKey) {
+      await db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`).set(
+        {
+          status: "completed",
+          secureUrl,
+          quotaRemaining,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
     }
 
-    return NextResponse.json(
-      {
-        error:
-          "All configured Hugging Face image models failed for this request. Verify token permission 'Make calls to Inference Providers' and available Hugging Face credits.",
-      },
-      { status: 503 },
-    );
+    return NextResponse.json({
+      imageUrl: secureUrl,
+      quotaRemaining,
+    });
   } catch (error: any) {
+    const authError = toApiAuthErrorResponse(error);
+    if (authError) return authError;
+
+    const securityError = toAiSecurityErrorResponse(error);
+    if (securityError) {
+      if (uid) {
+        await recordAiUsageEvent({
+          uid,
+          endpoint: "generate-image",
+          success: false,
+          inputChars: promptLength || undefined,
+          model: selectedModel || undefined,
+          ipHash: ipHash || undefined,
+          error: error?.message,
+          metadata: {
+            errorType: error?.name || "SecurityError",
+          },
+        });
+      }
+
+      return securityError;
+    }
+
+    if (uid) {
+      await recordAiUsageEvent({
+        uid,
+        endpoint: "generate-image",
+        success: false,
+        inputChars: promptLength || undefined,
+        model: selectedModel || undefined,
+        ipHash: ipHash || undefined,
+        error: error?.message,
+        metadata: {
+          errorType: error?.name || "UnhandledError",
+        },
+      });
+
+      if (idempotencyKey) {
+        await getFirebaseAdminDb()
+          .doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`)
+          .set(
+            {
+              status: "failed",
+              error: error?.message,
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+          );
+      }
+    }
+
     console.error("Image Generate Error:", error);
     return NextResponse.json(
       { error: error.message || "Failed to generate image" },
