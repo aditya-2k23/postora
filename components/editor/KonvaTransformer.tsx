@@ -36,7 +36,10 @@ export function KonvaTransformer({
     <Transformer
       ref={transformerRef}
       rotateEnabled
-      keepRatio={false}
+      keepRatio={selectedIds.length === 1 && (
+        elements.find(el => el.id === selectedIds[0])?.type === 'image' || 
+        elements.find(el => el.id === selectedIds[0])?.type === 'text'
+      )}
       enabledAnchors={[
         "top-left",
         "top-center",
@@ -47,6 +50,12 @@ export function KonvaTransformer({
         "bottom-center",
         "bottom-right",
       ]}
+onTransform={(evt) => {
+        const node = evt.target;
+        if (node.getType() === 'Group') {
+          // Force update of children if needed during live transform
+        }
+      }}
       onTransformEnd={() => {
         const transformer = transformerRef.current;
         if (!transformer) return;

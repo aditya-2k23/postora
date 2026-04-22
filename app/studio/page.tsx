@@ -182,28 +182,61 @@ export default function StudioPage() {
 
   const lastCardsSyncedRef = useRef<string>("");
   const lastCanvasSyncedRef = useRef<string>("");
-  const hasLoadedCanvasRef = useRef<string | null>(null);
+  const hasLoadedProjectRef = useRef<string | null>(null);
 
-  // Initial canvas load for existing projects
+  // Initial project & canvas load for existing projects
   useEffect(() => {
     if (
       !mounted ||
       !user ||
       !projectId ||
-      hasLoadedCanvasRef.current === projectId
+      hasLoadedProjectRef.current === projectId
     )
       return;
 
-    const loadCanvasData = async () => {
+    const loadProjectData = async () => {
       try {
         const projectDocRef = doc(
           db,
           `users/${user.uid}/projects/${projectId}`,
         );
         const projectSnap = await getDoc(projectDocRef);
-        const projectData = projectSnap.exists() ? projectSnap.data() : null;
-        const canvas = projectData?.canvas;
+        if (!projectSnap.exists()) {
+          hasLoadedProjectRef.current = projectId;
+          return;
+        }
 
+        const data = projectSnap.data();
+
+        // 1. Populate Studio Store
+        const studio = useStudioStore.getState();
+        if (data.prompt !== undefined) studio.setPrompt(data.prompt);
+        if (data.tone !== undefined) studio.setTone(data.tone);
+        if (data.platform !== undefined) studio.setPlatform(data.platform);
+        if (data.aspectRatio !== undefined)
+          studio.setAspectRatio(data.aspectRatio);
+        if (data.numCards !== undefined) studio.setNumCards(data.numCards);
+        if (data.themeSettings) studio.updateTheme(data.themeSettings);
+        if (data.cards) studio.setCards(data.cards);
+        if (data.chatHistory) studio.setChatHistory(data.chatHistory);
+        if (data.assistantHistory)
+          studio.setAssistantHistory(data.assistantHistory);
+
+        // Track last synced to avoid immediate re-save
+        lastCardsSyncedRef.current = JSON.stringify({
+          prompt: data.prompt || "",
+          platform: data.platform || "",
+          tone: data.tone || "",
+          aspectRatio: data.aspectRatio || "",
+          numCards: data.numCards || 5,
+          themeSettings: data.themeSettings || studio.themeSettings,
+          cards: data.cards || [],
+          chatHistory: data.chatHistory || [],
+          assistantHistory: data.assistantHistory || [],
+        });
+
+        // 2. Populate Canvas Store
+        const canvas = data.canvas;
         if (canvas && typeof canvas === "object") {
           useCanvasStore.setState({
             slidesByCardId: canvas.slidesByCardId || {},
@@ -220,13 +253,14 @@ export default function StudioPage() {
             rulerEnabled: canvas.rulerEnabled,
           });
         }
-        hasLoadedCanvasRef.current = projectId;
+
+        hasLoadedProjectRef.current = projectId;
       } catch (error) {
-        console.error("Failed to load separate canvas state:", error);
+        console.error("Failed to load project data:", error);
       }
     };
 
-    loadCanvasData();
+    loadProjectData();
   }, [mounted, user, projectId, canvasCurrentSlideId]);
 
   // Sync 1: Metadata and Cards

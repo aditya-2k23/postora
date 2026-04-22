@@ -109,7 +109,14 @@ export function CanvasEditor() {
   useEffect(() => {
     cards.forEach((card) => {
       syncCardContent(card);
-      syncCardImage(card.id, card.imageUrl);
+      
+      const slide = slidesByCardId[card.id];
+      const hasImage = slide?.elements.some(el => el.type === 'image');
+      
+      // Only auto-sync image if the slide has no image yet and card has one
+      if (card.imageUrl && !hasImage) {
+        syncCardImage(card.id, card.imageUrl);
+      }
     });
   }, [cards, syncCardContent, syncCardImage]);
 
@@ -131,72 +138,95 @@ export function CanvasEditor() {
     return () => setStageRef(slideId, null);
   }, [slideId, stage, setStageRef]);
 
+  // 4. Keyboard Shortcuts
   useEffect(() => {
     const handler = (evt: KeyboardEvent) => {
-      const currentSlide = slideRef.current;
-      const editorRoot = editorRootRef.current;
-
-      // Ensure we have an active slide and the event originated within the editor
-      if (
-        !currentSlide ||
-        !editorRoot ||
-        !editorRoot.contains(evt.target as Node) ||
-        isTypingTarget(evt.target)
-      ) {
-        return;
-      }
-
-      const currentSelectedIds = selectedElementIdsRef.current;
-
-      const selectedTextElement =
-        currentSelectedIds.length === 1
-          ? currentSlide?.elements.find(
-              (el) =>
-                el.id === currentSelectedIds[0] &&
-                el.type === "text" &&
-                !el.locked,
-            )
-          : undefined;
-
       const isMeta = evt.metaKey || evt.ctrlKey;
-      if (isMeta && evt.key.toLowerCase() === "z") {
-        evt.preventDefault();
-        if (evt.shiftKey) redo();
-        else undo();
+      const key = evt.key.toLowerCase();
+      const target = evt.target as HTMLElement;
+
+      // 1. Check for global commands that we want to intercept early
+      // Note: We use capturing phase to beat browser defaults like Ctrl+D (bookmark), Ctrl+Y (history)
+      const isShortcut = isMeta && (key === "d" || key === "z" || key === "y" || key === "c" || key === "v" || key === "s");
+      const isDelete = key === "delete" || key === "backspace";
+
+      if ((isShortcut || isDelete) && !isTypingTarget(target)) {
+        if (isMeta && key === "d") evt.preventDefault();
+        if (isMeta && key === "z") evt.preventDefault();
+        if (isMeta && key === "y") evt.preventDefault();
+        if (isDelete && selectedElementIdsRef.current.length > 0) evt.preventDefault();
+      }
+
+      if (isTypingTarget(target)) return;
+
+      // Undo/Redo
+      if (isMeta && key === "z") {
+        if (evt.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
         return;
       }
-      if (isMeta && evt.key.toLowerCase() === "c") {
-        copySelected();
+
+      if (isMeta && key === "y") {
+        redo();
         return;
       }
-      if (isMeta && evt.key.toLowerCase() === "v") {
+
+      // Tool selection shortcuts
+      if (!isMeta) {
+        if (key === "v" || key === "escape") {
+          setActiveTool("select");
+          return;
+        }
+        if (key === "t") {
+          setActiveTool("text");
+          return;
+        }
+        if (key === "h") {
+          setActiveTool("grab");
+          return;
+        }
+      }
+
+      // Slide-specific actions
+      const currentSlide = slideRef.current;
+      if (!currentSlide) return;
+      const slideId = currentSlide.cardId;
+
+      if (isMeta && key === "c") {
+        if (selectedElementIdsRef.current.length > 0) {
+          evt.preventDefault();
+          copySelected();
+        }
+        return;
+      }
+
+      if (isMeta && (key === "v" && isMeta)) { // Handle Ctrl+V separately to allow single-key 'v' for tool
         evt.preventDefault();
         pushHistory();
         pasteClipboard();
         return;
       }
-      if (evt.key === "Delete" || evt.key === "Backspace") {
-        if (currentSelectedIds.length === 0) return;
 
-        if (evt.key === "Backspace" && selectedTextElement?.type === "text") {
-          evt.preventDefault();
-          if (selectedTextElement.text.length > 0) {
-            pushHistory();
-            updateElement(selectedTextElement.id, {
-              text: selectedTextElement.text.slice(0, -1),
-            });
-          }
-          return;
-        }
-
-        evt.preventDefault();
+      if (isMeta && key === "d") {
         pushHistory();
-        deleteSelected();
+        duplicateSelected(slideId);
         return;
       }
+
+      if (isDelete) {
+        if (selectedElementIdsRef.current.length > 0) {
+          pushHistory();
+          deleteSelected(slideId);
+        }
+        return;
+      }
+      
       if (evt.key.startsWith("Arrow")) {
         const amount = evt.shiftKey ? 10 : 1;
-        if (currentSelectedIds.length === 0) return;
+        if (selectedElementIdsRef.current.length === 0) return;
         evt.preventDefault();
         pushHistory();
         if (evt.key === "ArrowUp") moveSelectedBy(0, -amount);
@@ -206,9 +236,19 @@ export function CanvasEditor() {
       }
     };
 
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, []);
+    window.addEventListener("keydown", handler, true); // Use capture to intercept before browser defaults
+    return () => window.removeEventListener("keydown", handler, true);
+  }, [
+    copySelected,
+    pasteClipboard,
+    deleteSelected,
+    duplicateSelected,
+    pushHistory,
+    undo,
+    redo,
+    setActiveTool,
+    moveSelectedBy,
+  ]);
 
   if (!cards.length || !slide) {
     return (
@@ -243,7 +283,7 @@ export function CanvasEditor() {
           }}
           onDuplicate={() => {
             pushHistory();
-            duplicateSelected();
+            duplicateSelected(slide.cardId);
           }}
           onBringForward={() => {
             pushHistory();
@@ -252,6 +292,10 @@ export function CanvasEditor() {
           onSendBackward={() => {
             pushHistory();
             sendBackward();
+          }}
+          onDelete={() => {
+            pushHistory();
+            deleteSelected(slide.cardId);
           }}
           gridEnabled={gridEnabled}
           rulerEnabled={rulerEnabled}

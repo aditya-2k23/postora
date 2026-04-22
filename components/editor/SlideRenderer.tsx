@@ -59,6 +59,8 @@ const ImageNode = memo(function ImageNode({
         onChange(element.id, { x: evt.target.x(), y: evt.target.y() });
         onDragEnd?.(element.id, evt.target.x(), evt.target.y());
       }}
+      width={element.width}
+      height={element.height}
     >
       <Rect
         width={element.width}

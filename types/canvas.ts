@@ -73,7 +73,7 @@ export type ShapeElement = {
 
 export type SlideElement = TextElement | ImageElement | ShapeElement;
 
-export type CanvasTool = "select" | "text" | "shape" | "image";
+export type CanvasTool = "select" | "text" | "shape" | "image" | "grab";
 
 export type CanvasSlide = {
   cardId: string;

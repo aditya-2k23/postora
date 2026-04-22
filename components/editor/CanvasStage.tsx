@@ -278,6 +278,8 @@ export function CanvasStage({
     const point = toCanvasPoint(stage);
     if (!point) return;
 
+    if (activeTool === "grab") return;
+
     if (activeTool === "text") {
       setTextDraft({
         startX: point.x,
@@ -309,6 +311,7 @@ export function CanvasStage({
   };
 
   const handleMouseMove = () => {
+    if (activeTool === "grab") return;
     if (textDraft && stageRef.current) {
       const point = toCanvasPoint(stageRef.current);
       if (!point) return;
@@ -335,6 +338,7 @@ export function CanvasStage({
   };
 
   const handleMouseUp = () => {
+    if (activeTool === "grab") return;
     if (textDraft) {
       if (activeTool !== "text") {
         setTextDraft(null);
@@ -444,7 +448,14 @@ export function CanvasStage({
     <div
       ref={wrapRef}
       className="relative w-full h-full bg-muted/20 overflow-hidden select-none"
-      style={{ cursor: activeTool === "text" ? "crosshair" : "default" }}
+      style={{
+        cursor:
+          activeTool === "text"
+            ? "crosshair"
+            : activeTool === "grab"
+              ? "grab"
+              : "default",
+      }}
       onContextMenu={(evt) => {
         evt.preventDefault();
       }}
@@ -464,6 +475,17 @@ export function CanvasStage({
         scale={{ x: fit, y: fit }}
         x={stageOffsetX}
         y={stageOffsetY}
+        draggable={activeTool === "grab"}
+        onDragStart={(evt) => {
+          if (activeTool === "grab") {
+            evt.target.getStage()?.container().style.setProperty("cursor", "grabbing");
+          }
+        }}
+        onDragEnd={(evt) => {
+          if (activeTool === "grab") {
+            evt.target.getStage()?.container().style.setProperty("cursor", "grab");
+          }
+        }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}

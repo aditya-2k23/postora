@@ -67,7 +67,9 @@ interface StudioState {
   setProjectId: (id: string | null) => void;
   setQuotaRemaining: (val: number | null) => void;
   addChatMessage: (message: ChatMessage) => void;
+  setChatHistory: (history: ChatMessage[]) => void;
   addAssistantMessage: (message: AssistantMessage) => void;
+  setAssistantHistory: (history: AssistantMessage[]) => void;
   setIsAssistantThinking: (v: boolean) => void;
   clearAssistantHistory: () => void;
   pushUndo: () => void;
@@ -161,11 +163,13 @@ export const useStudioStore = create<StudioState>()(
         set((state) => ({
           chatHistory: [...state.chatHistory, message],
         })),
+      setChatHistory: (chatHistory) => set({ chatHistory }),
 
       addAssistantMessage: (message) =>
         set((state) => ({
           assistantHistory: [...state.assistantHistory, message],
         })),
+      setAssistantHistory: (assistantHistory) => set({ assistantHistory }),
 
       setIsAssistantThinking: (isAssistantThinking) =>
         set({ isAssistantThinking }),

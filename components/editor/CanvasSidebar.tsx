@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Replace, WandSparkles } from "lucide-react";
+import { Plus, Replace, WandSparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { SlideElement } from "@/types/canvas";
 import { LayerPanel } from "@/components/editor/LayerPanel";
@@ -27,6 +27,7 @@ type Props = {
   onRegenerateImage: () => void;
   onReplaceImage: (file: File) => void;
   onAddElement: (type: "text" | "image" | "shape") => void;
+  isRegenerating?: boolean;
 };
 
 const FONT_OPTIONS = ["Inter", "Poppins", "Playfair Display"] as const;
@@ -54,6 +55,7 @@ export function CanvasSidebar({
   onRegenerateImage,
   onReplaceImage,
   onAddElement,
+  isRegenerating = false,
 }: Props) {
   const selected = slideElements.find((el) => selectedIds[0] === el.id);
   const selectedText =
@@ -448,8 +450,13 @@ export function CanvasSidebar({
               variant="outline"
               className="text-[11px]"
               onClick={onRegenerateImage}
+              disabled={isRegenerating}
             >
-              <WandSparkles className="w-3.5 h-3.5 mr-1" />
+              {isRegenerating ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+              ) : (
+                <WandSparkles className="w-3.5 h-3.5 mr-1" />
+              )}
               Regen
             </Button>
             <label className="h-8 inline-flex items-center justify-center rounded-md border border-border text-[11px] px-2 cursor-pointer">

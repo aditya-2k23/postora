@@ -8,12 +8,14 @@ import { useCanvasStore } from "@/store/useCanvasStore";
 import { useStudioStore } from "@/store/useStudioStore";
 import { useAuth } from "@/components/auth-provider";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 export function RightSidebar() {
   const { user, loading } = useAuth();
   const router = useRouter();
 
-  const { cards, activeCardId, aspectRatio, updateCard } = useStudioStore();
+  const { cards, activeCardId, aspectRatio, updateCard, themeSettings } =
+    useStudioStore();
   const {
     slidesByCardId,
     currentSlideId,
@@ -34,6 +36,9 @@ export function RightSidebar() {
   const slideId = currentSlideId ?? activeCardId;
   const slide = slideId ? slidesByCardId[slideId] : undefined;
   const currentCard = cards.find((card) => card.id === slideId);
+  const accent = themeSettings.primaryColor;
+
+  const [isRegeneratingImage, setIsRegeneratingImage] = useState(false);
 
   const requireAiToken = async () => {
     if (loading) {
@@ -126,8 +131,14 @@ export function RightSidebar() {
         }}
         onRegenerateImage={async () => {
           if (!currentCard?.imagePrompt || !currentCard?.id) return;
+          setIsRegeneratingImage(true);
+          const loadingToast = toast.loading("Regenerating image...");
+
           try {
             const authToken = await requireAiToken();
+            const selectedImage = slide.elements.find(
+              (el) => selectedElementIds.includes(el.id) && el.type === "image",
+            );
 
             const res = await fetch("/api/generate-image", {
               method: "POST",
@@ -139,7 +150,7 @@ export function RightSidebar() {
               body: JSON.stringify({
                 prompt: currentCard.imagePrompt,
                 aspectRatio,
-                style: useStudioStore.getState().themeSettings.style,
+                style: themeSettings.style,
                 projectId: useStudioStore.getState().projectId,
                 cardId: currentCard.id,
               }),
@@ -167,16 +178,25 @@ export function RightSidebar() {
             updateCard(currentCard.id, { imageUrl: data.imageUrl });
             useCanvasStore
               .getState()
-              .syncCardImage(currentCard.id, data.imageUrl);
+              .syncCardImage(
+                currentCard.id,
+                data.imageUrl,
+                selectedImage?.id,
+              );
+            toast.dismiss(loadingToast);
             toast.success("Image regenerated");
           } catch (error: unknown) {
+            toast.dismiss(loadingToast);
             const message =
               error instanceof Error
                 ? error.message
                 : "Failed to regenerate image";
             toast.error(message);
+          } finally {
+            setIsRegeneratingImage(false);
           }
         }}
+        isRegenerating={isRegeneratingImage}
         onReplaceImage={async (file) => {
           const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
           if (!file.type.startsWith("image/")) {
@@ -249,7 +269,7 @@ export function RightSidebar() {
               y: 150,
               width: 150,
               height: 150,
-              fill: "#3B82F6", // Default Blue
+              fill: accent, // Use primary brand color
               opacity: 0.5,
             });
           } else if (type === "image") {

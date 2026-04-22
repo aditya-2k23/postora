@@ -190,7 +190,7 @@ type CanvasState = {
     theme: ThemeSettings,
   ) => void;
   syncCardContent: (card: SocialCard) => void;
-  syncCardImage: (cardId: string, imageUrl?: string) => void;
+  syncCardImage: (cardId: string, imageUrl: string, targetElementId?: string) => void;
   setCurrentSlideId: (cardId: string | null) => void;
   setSelectedElementIds: (ids: string[]) => void;
   toggleSelectedElementId: (id: string, additive?: boolean) => void;
@@ -199,8 +199,8 @@ type CanvasState = {
   setBackgroundColor: (color: string) => void;
   addElement: (element: SlideElement) => void;
   updateElement: (elementId: string, updates: Partial<SlideElement>) => void;
-  deleteSelected: () => void;
-  duplicateSelected: () => void;
+  deleteSelected: (cardId?: string) => void;
+  duplicateSelected: (cardId?: string) => void;
   copySelected: () => void;
   pasteClipboard: () => void;
   moveSelectedBy: (dx: number, dy: number) => void;
@@ -303,62 +303,106 @@ export const useCanvasStore = create<CanvasState>()(
           if (!slide) return state;
 
           const titleElement = slide.elements.find(
-            (el) => el.type === "text" && el.fontWeight === "700",
+            (el) =>
+              el.type === "text" &&
+              (el.fontWeight === "800" || el.fontSize > 40),
           );
           const bodyElement = slide.elements.find(
             (el) =>
               el.type === "text" &&
               el.id !== titleElement?.id &&
-              el.fontWeight !== "700",
+              (el.fontWeight === "500" || el.fontSize < 40),
           );
 
-          let updated = slide;
+          let nextElements = [...slide.elements];
           let changed = false;
+
+          // Sync Title
           if (titleElement && titleElement.type === "text") {
-            if (titleElement.text !== card.title) {
+            const transformedTitle = card.title.toUpperCase();
+            if (titleElement.text !== transformedTitle) {
               changed = true;
-              updated = replaceInSlide(updated, titleElement.id, (el) =>
-                el.type === "text" ? { ...el, text: card.title } : el,
-              );
-            }
-          }
-          if (bodyElement && bodyElement.type === "text") {
-            if (bodyElement.text !== card.content) {
-              changed = true;
-              updated = replaceInSlide(updated, bodyElement.id, (el) =>
-                el.type === "text" ? { ...el, text: card.content } : el,
+              nextElements = nextElements.map((el) =>
+                el.id === titleElement.id
+                  ? { ...el, text: transformedTitle }
+                  : el,
               );
             }
           }
 
-          if (!changed) {
-            return state;
+          // Sync Body
+          if (bodyElement) {
+            if (bodyElement.type === "text" && bodyElement.text !== card.content) {
+              changed = true;
+              nextElements = nextElements.map((el) =>
+                el.id === bodyElement.id ? { ...el, text: card.content } : el,
+              );
+            }
           }
+
+          if (!changed) return state;
 
           return {
             slidesByCardId: {
               ...state.slidesByCardId,
-              [card.id]: updated,
+              [card.id]: { ...slide, elements: nextElements },
             },
           };
         }),
 
-      syncCardImage: (cardId, imageUrl) =>
+      syncCardImage: (cardId, imageUrl, targetElementId) =>
         set((state) => {
           const slide = state.slidesByCardId[cardId];
-          if (!slide) return state;
-          const image = slide.elements.find((el) => el.type === "image");
-          if (!image || image.type !== "image") return state;
+          if (!slide || !imageUrl) return state;
 
-          const nextSrc = imageUrl ?? "";
-          if (image.src === nextSrc) return state;
+          const existingImage = targetElementId
+            ? slide.elements.find(
+                (el) => el.id === targetElementId && el.type === "image",
+              )
+            : slide.elements.find((el) => el.type === "image");
+
+          if (existingImage && existingImage.type === "image") {
+            if (existingImage.src === imageUrl) return state;
+            return {
+              slidesByCardId: {
+                ...state.slidesByCardId,
+                [cardId]: {
+                  ...slide,
+                  elements: slide.elements.map((el) =>
+                    el.id === existingImage.id ? { ...el, src: imageUrl } : el,
+                  ),
+                },
+              },
+            };
+          }
+
+          // If no image element, but we have an imageUrl, ADD IT.
+          // This happens when image generation finishes AFTER the slide shell is created.
+          const currentAspectRatio = "4:5"; // Ideally tracked in store, but defaulting to portrait
+          const size = getCanvasSize(currentAspectRatio);
+          const imageWidth = size.width * 0.88;
+          const imageHeight = size.height * 0.45;
+          const imageY = size.height * 0.32;
+
+          const newImage: ImageElement = {
+            id: uid(),
+            type: "image",
+            src: imageUrl,
+            x: (size.width - imageWidth) / 2,
+            y: imageY,
+            width: imageWidth,
+            height: imageHeight,
+            opacity: 1,
+            cornerRadius: 32,
+          };
 
           return {
             slidesByCardId: {
               ...state.slidesByCardId,
-              [cardId]: replaceInSlide(slide, image.id, (el) =>
-                el.type === "image" ? { ...el, src: nextSrc } : el,
-              ),
+              [cardId]: {
+                ...slide,
+                elements: [newImage, ...slide.elements], // Add to bottom (background-ish)
+              },
             },
           };
         }),
@@ -448,9 +492,9 @@ export const useCanvasStore = create<CanvasState>()(
           };
         }),
 
-      deleteSelected: () =>
+      deleteSelected: (cardId?: string) =>
         set((state) => {
-          const current = state.currentSlideId;
+          const current = cardId ?? state.currentSlideId;
           if (!current) return state;
           const slide = state.slidesByCardId[current];
           if (!slide) return state;
@@ -468,9 +512,9 @@ export const useCanvasStore = create<CanvasState>()(
           };
         }),
 
-      duplicateSelected: () =>
+      duplicateSelected: (cardId?: string) =>
         set((state) => {
-          const current = state.currentSlideId;
+          const current = cardId ?? state.currentSlideId;
           if (!current) return state;
           const slide = state.slidesByCardId[current];
           if (!slide) return state;
