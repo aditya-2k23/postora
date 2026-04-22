@@ -197,6 +197,8 @@ export async function POST(req: Request) {
     const decodedToken = await requireAuthenticatedUser(req);
     uid = decodedToken.uid;
 
+    enforceIpRateLimit(req, "generate-content");
+
     const db = getFirebaseAdminDb();
     if (idempotencyKey) {
       const idKeyRef = db.doc(`users/${uid}/idempotencyKeys/${idempotencyKey}`);
@@ -252,8 +254,6 @@ export async function POST(req: Request) {
         );
       }
     }
-
-    enforceIpRateLimit(req, "generate-content");
 
     const key = getGeminiToken();
 

@@ -267,7 +267,7 @@ export default function ProjectsPage() {
               <DialogDescription className="py-2">
                 Are you sure you want to delete{" "}
                 <span className="font-semibold text-foreground">
-                  "{projectToDelete?.prompt}"
+                  &quot;{projectToDelete?.prompt}&quot;
                 </span>
                 ?
                 <br />

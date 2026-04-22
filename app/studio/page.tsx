@@ -63,6 +63,7 @@ export default function StudioPage() {
   const rightPanelRef = useRef<PanelImperativeHandle | null>(null);
   const slidesPanelRef = useRef<PanelImperativeHandle | null>(null);
   const lastReconciledProjectIdRef = useRef<string | null>(null);
+  const migrationInFlightRef = useRef(false);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [slidesCollapsed, setSlidesCollapsed] = useState(false);
@@ -112,7 +113,8 @@ export default function StudioPage() {
       !user ||
       !projectId ||
       cards.length === 0 ||
-      lastReconciledProjectIdRef.current === projectId
+      lastReconciledProjectIdRef.current === projectId ||
+      migrationInFlightRef.current
     )
       return;
 
@@ -169,10 +171,12 @@ export default function StudioPage() {
       } catch (error) {
         console.error("Failed to reconcile/migrate images:", error);
       } finally {
+        migrationInFlightRef.current = false;
         lastReconciledProjectIdRef.current = projectId;
       }
     };
 
+    migrationInFlightRef.current = true;
     backfillImages();
   }, [mounted, user, projectId, cards]);
 

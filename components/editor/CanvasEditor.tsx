@@ -95,6 +95,7 @@ export function CanvasEditor() {
 
   const slideRef = useRef(slide);
   const selectedElementIdsRef = useRef(selectedElementIds);
+  const editorRootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     slideRef.current = slide;
@@ -132,11 +133,19 @@ export function CanvasEditor() {
 
   useEffect(() => {
     const handler = (evt: KeyboardEvent) => {
-      if (isTypingTarget(evt.target)) {
+      const currentSlide = slideRef.current;
+      const editorRoot = editorRootRef.current;
+
+      // Ensure we have an active slide and the event originated within the editor
+      if (
+        !currentSlide ||
+        !editorRoot ||
+        !editorRoot.contains(evt.target as Node) ||
+        isTypingTarget(evt.target)
+      ) {
         return;
       }
 
-      const currentSlide = slideRef.current;
       const currentSelectedIds = selectedElementIdsRef.current;
 
       const selectedTextElement =
@@ -216,7 +225,7 @@ export function CanvasEditor() {
   }
 
   return (
-    <div className="w-full h-full flex overflow-hidden">
+    <div className="w-full h-full flex overflow-hidden" ref={editorRootRef}>
       <div className="flex-1 min-w-0 min-h-0 flex flex-col">
         <CanvasToolbar
           activeTool={activeTool}
