@@ -25,7 +25,14 @@
         "createdAt": { "type": "number", "description": "Timestamp" },
         "updatedAt": { "type": "number", "description": "Timestamp" }
       },
-      "required": ["userId", "prompt", "platform", "aspectRatio", "createdAt", "updatedAt"]
+      "required": [
+        "userId",
+        "prompt",
+        "platform",
+        "aspectRatio",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {

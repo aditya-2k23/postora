@@ -16,37 +16,52 @@ An AI-powered social media post and carousel creator using Next.js 15, Tailwind,
 - **Zustand (`store/useStudioStore.ts`)**: Powers the intricate canvas state. Implements `persist` middleware for local caching.
 - **Tailwind CSS & Shadcn UI**: Flexible design system.
 - **Firebase Firestore & Auth**: Secure cloud storage mapping records against authenticated user scopes.
-- **Google GenAI SDK**: Uses `gemini-3-flash-preview` and `gemini-3.1-flash-image-preview` for content and graphics.
+- **Google GenAI SDK + Hugging Face + Cloudinary**: Uses Gemini for content generation, Hugging Face for AI image generation, and Cloudinary for durable image storage.
 
 ## Quick Start
 
 1. Provide the following inside `.env.local`:
 
 ```bash
-NEXT_PUBLIC_GEMINI_API_KEY="YOUR_GEMINI_API_KEY"
+GEMINI_API_KEY="YOUR_GEMINI_API_KEY"
+HUGGINGFACE_API_KEY="YOUR_HUGGINGFACE_API_KEY"
+
+CLOUDINARY_CLOUD_NAME="YOUR_CLOUDINARY_CLOUD_NAME"
+CLOUDINARY_API_KEY="YOUR_CLOUDINARY_API_KEY"
+CLOUDINARY_API_SECRET="YOUR_CLOUDINARY_API_SECRET"
+
+NEXT_PUBLIC_FIREBASE_API_KEY="YOUR_FIREBASE_WEB_API_KEY"
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="YOUR_FIREBASE_PROJECT.firebaseapp.com"
+NEXT_PUBLIC_FIREBASE_PROJECT_ID="YOUR_FIREBASE_PROJECT_ID"
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="YOUR_FIREBASE_PROJECT.firebasestorage.app"
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="YOUR_FIREBASE_MESSAGING_SENDER_ID"
+NEXT_PUBLIC_FIREBASE_APP_ID="YOUR_FIREBASE_APP_ID"
+NEXT_PUBLIC_FIREBASE_FIRESTORE_DATABASE_ID="(default)"
+
+FIREBASE_PROJECT_ID="YOUR_FIREBASE_PROJECT_ID"
+FIREBASE_CLIENT_EMAIL="firebase-adminsdk-xxxxx@YOUR_FIREBASE_PROJECT_ID.iam.gserviceaccount.com"
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYOUR_PRIVATE_KEY\n-----END PRIVATE KEY-----\n"
+FIREBASE_FIRESTORE_DATABASE_ID="(default)"
+
+AI_DAILY_LIMIT_GENERATE_CONTENT="25"
+AI_DAILY_LIMIT_ASSISTANT_CHAT="80"
+AI_DAILY_LIMIT_GENERATE_IMAGE="40"
+
+AI_RATE_LIMIT_GENERATE_CONTENT_PER_MINUTE="12"
+AI_RATE_LIMIT_ASSISTANT_CHAT_PER_MINUTE="20"
+AI_RATE_LIMIT_GENERATE_IMAGE_PER_MINUTE="16"
+
+ENFORCE_AUTH="true"
+ENFORCE_QUOTAS="true"
+ENABLE_IMAGE_MIGRATION="false"
+ENFORCE_ADMIN_AUTH="true"
+
 APP_URL="http://localhost:3000"
 ```
 
-2. Initialize your `firebase-applet-config.json` with your Firebase project properties:
-```json
-{
-  "projectId": "your-firebase-projectId",
-  "appId": "your-app-id",
-  "apiKey": "your-firebase-web-api-key",
-  "authDomain": "your-firebase-projectId.firebaseapp.com",
-  "firestoreDatabaseId": "(default)"
-}
-```
-
-3. Enable **Google Sign-In** within your Firebase Console `Authentication` menu.
-4. Set up standard Firestore security rules enforcing read/write mapping per `userId`.
-
-5. Run `npm run dev` and navigate to `http://localhost:3000`.
-
-## Deployment
-
-Deploying this project to Vercel is highly recommended:
-1. Push your repository to GitHub.
-2. Link your repository inside your Vercel Dashboard.
-3. In the "Environment Variables" section of Vercel, inject the keys above.
-4. Click Deploy. Ensure your App URL points to your Vercel deployment link rather than localhost.
+1. Enable **Google Sign-In** within your Firebase Console `Authentication` menu.
+2. In Firebase Console, set demo Firestore rules so authenticated users can read/write only their own docs under `users/{uid}/projects/{projectId}` (and optionally `users/{uid}` for profile docs).
+3. AI routes require Firebase ID token bearer auth, and daily/per-minute limits are enforced server-side.
+4. Cloudinary credentials are required for durable image persistence and legacy base64 migration.
+5. `ENFORCE_ADMIN_AUTH` protect the admin usage endpoint.
+6. Run `npm run dev` and navigate to `http://localhost:3000`.
