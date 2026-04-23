@@ -1,6 +1,7 @@
 "use client";
 
 import { useStudioStore, type SocialCard } from "@/store/useStudioStore";
+import { useShallow } from "zustand/shallow";
 import { getAccessibleTextColor } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -103,35 +104,49 @@ export function LeftSidebar() {
   const router = useRouter();
 
   const {
-    prompt,
-    setPrompt,
     tone,
-    setTone,
     platform,
-    setPlatform,
     aspectRatio,
-    setAspectRatio,
     numCards,
+    isGenerating,
+    chatHistory,
+    assistantHistory,
+    isAssistantThinking,
+    themeSettings,
+    quotaRemaining,
+  } = useStudioStore(
+    useShallow((s) => ({
+      tone: s.tone,
+      platform: s.platform,
+      aspectRatio: s.aspectRatio,
+      numCards: s.numCards,
+      isGenerating: s.isGenerating,
+      chatHistory: s.chatHistory,
+      assistantHistory: s.assistantHistory,
+      isAssistantThinking: s.isAssistantThinking,
+      themeSettings: s.themeSettings,
+      quotaRemaining: s.quotaRemaining,
+    })),
+  );
+
+  const hasCards = useStudioStore((s) => s.cards.length > 0);
+
+  const {
+    setPrompt,
+    setTone,
+    setPlatform,
+    setAspectRatio,
     setNumCards,
-    cards,
     setCards,
     setActiveCardId,
-    projectId,
-    setProjectId,
-    isGenerating,
     setIsGenerating,
-    chatHistory,
     addChatMessage,
-    assistantHistory,
     addAssistantMessage,
-    isAssistantThinking,
     setIsAssistantThinking,
     clearAssistantHistory,
     pushUndo,
-    themeSettings,
-    quotaRemaining,
     setQuotaRemaining,
-  } = useStudioStore();
+  } = useStudioStore.getState();
 
   const [activeTab, setActiveTab] = useState<SidebarTab>("generate");
   const [inputValue, setInputValue] = useState("");
@@ -164,6 +179,7 @@ export function LeftSidebar() {
 
   // ─── Generation flow ───
   const handleGenerate = async () => {
+    const { projectId, cards } = useStudioStore.getState();
     if (!projectId) {
       toast.error(
         "No active project. Please go to the Projects dashboard and create a new project first.",
@@ -407,6 +423,7 @@ export function LeftSidebar() {
   const handleAssistantSend = async () => {
     const text = inputValue.trim();
     if (!text) return;
+    const { cards, prompt } = useStudioStore.getState();
     if (cards.length === 0) {
       toast.error(
         "Generate a carousel first, then ask the assistant for help.",
@@ -501,7 +518,6 @@ export function LeftSidebar() {
   };
 
   const accent = themeSettings.primaryColor;
-  const hasCards = cards.length > 0;
 
   return (
     <div className="w-full h-full bg-card flex flex-col shrink-0 z-10 text-foreground overflow-hidden">

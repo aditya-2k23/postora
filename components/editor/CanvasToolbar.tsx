@@ -82,7 +82,9 @@ export function CanvasToolbar({
           <button
             key={tool.id}
             onClick={() => onToolChange(tool.id)}
-            title={tool.shortcut ? `${tool.label} (${tool.shortcut})` : tool.label}
+            title={
+              tool.shortcut ? `${tool.label} (${tool.shortcut})` : tool.label
+            }
             aria-label={tool.label}
             className={cn(
               "h-8 px-2.5 rounded-md text-xs flex items-center gap-1.5 transition-colors shrink-0",
@@ -92,7 +94,7 @@ export function CanvasToolbar({
             )}
           >
             <tool.icon className="w-3.5 h-3.5" />
-            {tool.label}
+            {activeTool === tool.id && <span>{tool.label}</span>}
           </button>
         ))}
       </div>
