@@ -18,30 +18,31 @@ cloudinary.config({
  */
 function extractPublicId(url: string): string | null {
   if (!url || !url.includes("cloudinary.com")) return null;
-  
+
   try {
     const parts = url.split("/");
     const uploadIndex = parts.indexOf("upload");
-    if (uploadIndex === -1) return null;
-    
-    // Everything after /upload/v[version]/ or /upload/
-    let publicIdWithExt = "";
-    if (parts[uploadIndex + 1].startsWith("v")) {
-      // It's a versioned URL: .../upload/v12345/public_id.jpg
-      publicIdWithExt = parts.slice(uploadIndex + 2).join("/");
-    } else {
-      // It's a non-versioned URL: .../upload/public_id.jpg
-      publicIdWithExt = parts.slice(uploadIndex + 1).join("/");
-    }
-    
-    // Remove extension
+    if (uploadIndex === -1 || !parts[uploadIndex + 1]) return null;
+
+    // Refactor to tolerate optional transformation segments and a strict version segment.
+    // Transformation segments usually have keys like w_ or contain commas.
+    // Version segments match a strict ^v\d+$ pattern.
+    const afterUpload = parts.slice(uploadIndex + 1).join("/");
+    const regex = /^(?:(?:[a-z]{1,2}_[^\/]+\/|[^\/]+,[^\/]+\/)*?)(?:v\d+\/)?([^\?#]+)$/i;
+    const match = afterUpload.match(regex);
+
+    if (!match) return null;
+
+    const publicIdWithExt = match[1];
     const dotIndex = publicIdWithExt.lastIndexOf(".");
+
+    // Strip extension and return public id
     if (dotIndex !== -1) {
       return publicIdWithExt.substring(0, dotIndex);
     }
     return publicIdWithExt;
   } catch (e) {
-    console.error("Failed to extract public ID from URL:", url, e);
+    // Return null on non-matching or malformed URLs rather than throwing
     return null;
   }
 }
@@ -66,31 +67,45 @@ export async function POST(req: Request) {
     }
 
     const projectData = projectSnap.data();
-    const allImageUrls: string[] = [...imageUrls];
+    const allImageUrls: string[] = [];
 
-    // Collect all image URLs from cards if not provided
-    if (allImageUrls.length === 0 && projectData?.cards) {
+    // 1. ALWAYS build the canonical deletion list from the verified project document first.
+    if (projectData?.cards) {
       projectData.cards.forEach((card: any) => {
-        if (card.imageUrl) allImageUrls.push(card.imageUrl);
+        if (card.imageUrl) {
+          allImageUrls.push(card.imageUrl);
+        }
       });
     }
 
-    // Also check canvas state for custom uploaded images
+    // Also check canvas state for custom uploaded or generated images
     if (projectData?.canvas?.slidesByCardId) {
       Object.values(projectData.canvas.slidesByCardId).forEach((slide: any) => {
         slide.elements?.forEach((el: any) => {
-          if (el.type === "image" && el.src) {
+          if (el.type === "image" && el.src && el.src.includes("cloudinary.com")) {
             allImageUrls.push(el.src);
           }
         });
       });
     }
 
-    // 2. Extract unique public IDs
+    // 2. Merge client-provided imageUrls if they are an array (normalize inputs)
+    if (Array.isArray(imageUrls)) {
+      allImageUrls.push(...imageUrls);
+    }
+
+    // 2. Extract and validate unique public IDs
+    // We strictly enforce that the public ID starts with the user's scoped folder.
+    const allowedPrefixes = [`postora_images/${uid}/`, `postora_uploads/${uid}/` ];
+    
     const publicIds = Array.from(new Set(
       allImageUrls
         .map(extractPublicId)
-        .filter((id): id is string => id !== null)
+        .filter((id): id is string => {
+          if (!id) return false;
+          // Security check: ensure the image belongs to the current user
+          return allowedPrefixes.some(prefix => id.startsWith(prefix));
+        })
     ));
 
     console.log(`[delete-project] Deleting ${publicIds.length} images from Cloudinary for project ${projectId}`);
@@ -98,14 +113,8 @@ export async function POST(req: Request) {
     // 3. Delete from Cloudinary
     if (publicIds.length > 0) {
       try {
-        // cloudinary.api.delete_resources is capped at 100, but projects shouldn't have that many.
-        // If they do, we'd need to chunk.
-        await new Promise((resolve, reject) => {
-          cloudinary.api.delete_resources(publicIds, (error, result) => {
-            if (error) reject(error);
-            else resolve(result);
-          });
-        });
+        // cloudinary.api.delete_resources is capped at 1000 IDs per call.
+        await cloudinary.api.delete_resources(publicIds);
       } catch (cloudinaryError) {
         console.error("[delete-project] Cloudinary deletion failed:", cloudinaryError);
         // We continue anyway to delete the project doc
