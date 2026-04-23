@@ -6,6 +6,7 @@ import { Line } from "konva/lib/shapes/Line";
 import { Rect } from "konva/lib/shapes/Rect";
 import { Text } from "konva/lib/shapes/Text";
 import jsPDF from "jspdf";
+import JSZip from "jszip";
 import { useCanvasStore } from "@/store/useCanvasStore";
 import { useStudioStore } from "@/store/useStudioStore";
 import {
@@ -184,13 +185,24 @@ export const exportToPNG = async () => {
   const slides = await getAllSlideExports();
   if (slides.length === 0) throw new Error("No slides found");
 
+  const zip = new JSZip();
+
   for (let i = 0; i < slides.length; i += 1) {
-    const link = document.createElement("a");
-    link.download = `social-card-${i + 1}.png`;
-    link.href = slides[i].dataUrl;
-    link.click();
-    await new Promise((resolve) => setTimeout(resolve, 120));
+    const response = await fetch(slides[i].dataUrl);
+    const blob = await response.blob();
+    zip.file(`social-card-${i + 1}.png`, blob);
   }
+
+  const content = await zip.generateAsync({ type: "blob" });
+  const url = URL.createObjectURL(content);
+  
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "social-cards.zip";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 };
 
 export const exportToPDF = async () => {

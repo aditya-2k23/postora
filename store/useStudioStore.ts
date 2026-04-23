@@ -88,6 +88,7 @@ const defaultTheme: ThemeSettings = {
 };
 
 const MAX_PERSISTED_DATA_URL_LENGTH = 12_000;
+const UNDO_STACK_LIMIT = 100;
 
 const sanitizePersistedCards = (cards: SocialCard[]): SocialCard[] =>
   cards.map((card) => {
@@ -178,7 +179,9 @@ export const useStudioStore = create<StudioState>()(
 
       pushUndo: () =>
         set((state) => ({
-          undoStack: [...state.undoStack, structuredClone(state.cards)],
+          undoStack: [...state.undoStack, structuredClone(state.cards)].slice(
+            -UNDO_STACK_LIMIT,
+          ),
           redoStack: [],
         })),
 
@@ -202,7 +205,9 @@ export const useStudioStore = create<StudioState>()(
           const next = newRedo.pop()!;
           return {
             redoStack: newRedo,
-            undoStack: [...state.undoStack, structuredClone(state.cards)],
+            undoStack: [...state.undoStack, structuredClone(state.cards)].slice(
+              -UNDO_STACK_LIMIT,
+            ),
             cards: next,
             activeCardId: next.length > 0 ? next[0].id : null,
           };

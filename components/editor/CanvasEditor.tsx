@@ -109,16 +109,16 @@ export function CanvasEditor() {
   useEffect(() => {
     cards.forEach((card) => {
       syncCardContent(card);
-      
+
       const slide = slidesByCardId[card.id];
-      const hasImage = slide?.elements.some(el => el.type === 'image');
-      
+      const hasImage = slide?.elements.some((el) => el.type === "image");
+
       // Only auto-sync image if the slide has no image yet and card has one
       if (card.imageUrl && !hasImage) {
         syncCardImage(card.id, card.imageUrl);
       }
     });
-  }, [cards, syncCardContent, syncCardImage]);
+  }, [cards, syncCardContent, syncCardImage, slidesByCardId]);
 
   useEffect(() => {
     if (activeCardId && activeCardId !== currentSlideId) {
@@ -147,14 +147,22 @@ export function CanvasEditor() {
 
       // 1. Check for global commands that we want to intercept early
       // Note: We use capturing phase to beat browser defaults like Ctrl+D (bookmark), Ctrl+Y (history)
-      const isShortcut = isMeta && (key === "d" || key === "z" || key === "y" || key === "c" || key === "v" || key === "s");
+      const isShortcut =
+        isMeta &&
+        (key === "d" ||
+          key === "z" ||
+          key === "y" ||
+          key === "c" ||
+          key === "v" ||
+          key === "s");
       const isDelete = key === "delete" || key === "backspace";
 
       if ((isShortcut || isDelete) && !isTypingTarget(target)) {
         if (isMeta && key === "d") evt.preventDefault();
         if (isMeta && key === "z") evt.preventDefault();
         if (isMeta && key === "y") evt.preventDefault();
-        if (isDelete && selectedElementIdsRef.current.length > 0) evt.preventDefault();
+        if (isDelete && selectedElementIdsRef.current.length > 0)
+          evt.preventDefault();
       }
 
       if (isTypingTarget(target)) return;
@@ -203,7 +211,8 @@ export function CanvasEditor() {
         return;
       }
 
-      if (isMeta && (key === "v" && isMeta)) { // Handle Ctrl+V separately to allow single-key 'v' for tool
+      if (isMeta && key === "v" && isMeta) {
+        // Handle Ctrl+V separately to allow single-key 'v' for tool
         evt.preventDefault();
         pushHistory();
         pasteClipboard();
@@ -223,7 +232,7 @@ export function CanvasEditor() {
         }
         return;
       }
-      
+
       if (evt.key.startsWith("Arrow")) {
         const amount = evt.shiftKey ? 10 : 1;
         if (selectedElementIdsRef.current.length === 0) return;
@@ -343,7 +352,11 @@ export function CanvasEditor() {
             const currentText = slide.elements.find(
               (el) => el.type === "text" && el.id === textEditing.elementId,
             );
-            if (currentText?.type === "text" && currentText.text === value) {
+            if (currentText?.type !== "text") {
+              stopTextEditing();
+              return;
+            }
+            if (currentText.text === value) {
               stopTextEditing();
               return;
             }
