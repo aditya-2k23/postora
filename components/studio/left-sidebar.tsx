@@ -232,7 +232,13 @@ export function LeftSidebar() {
         }),
       });
 
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch (err) {
+        data = { error: `Server error: ${res.statusText || res.status}` };
+      }
+
       if (!res.ok) {
         if (res.status === 429) {
           throw new Error(
@@ -349,7 +355,13 @@ export function LeftSidebar() {
           }),
         });
 
-        const data = await res.json();
+        let data;
+        try {
+          data = await res.json();
+        } catch (err) {
+          data = { error: `Server error: ${res.statusText || res.status}` };
+        }
+
         if (!res.ok) {
           const errorMsg = data.error || `Error ${res.status}: ${res.statusText}`;
           console.error(`[Image ${i + 1}] Generation failed:`, errorMsg);
@@ -405,7 +417,13 @@ export function LeftSidebar() {
         }),
       });
 
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch (err) {
+        data = {};
+      }
+
       if (res.ok && data.reply) {
         addAssistantMessage({ role: "assistant", text: data.reply });
         if (data.quotaRemaining !== undefined) {
@@ -475,7 +493,13 @@ export function LeftSidebar() {
         }),
       });
 
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch (err) {
+        data = { error: `Server error: ${res.statusText || res.status}` };
+      }
+
       if (!res.ok) {
         if (res.status === 429) {
           throw new Error(

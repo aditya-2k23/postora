@@ -98,6 +98,8 @@ type ImagePayload = {
   cardId: string;
 };
 
+const ALLOWED_ASPECT_RATIOS = ["1:1", "4:5", "9:16", "16:9"];
+
 function validateImagePayload(payload: unknown): ImagePayload {
   if (!payload || typeof payload !== "object") {
     throw new ValidationError("Invalid request payload.");
@@ -116,12 +118,30 @@ function validateImagePayload(payload: unknown): ImagePayload {
     );
   }
 
+  const aspectRatio = typeof raw.aspectRatio === "string" ? raw.aspectRatio : "4:5";
+  if (!ALLOWED_ASPECT_RATIOS.includes(aspectRatio)) {
+    throw new ValidationError(
+      `Invalid aspect ratio. Allowed values: ${ALLOWED_ASPECT_RATIOS.join(", ")}`,
+    );
+  }
+
+  const style = typeof raw.style === "string" ? raw.style.trim() : "minimal";
+  if (style.length > 50) {
+    throw new ValidationError("Style name is too long.");
+  }
+
+  const projectId = typeof raw.projectId === "string" ? raw.projectId.trim() : "";
+  const cardId = typeof raw.cardId === "string" ? raw.cardId.trim() : "";
+
+  if (projectId.length > 64) throw new ValidationError("Invalid Project ID.");
+  if (cardId.length > 64) throw new ValidationError("Invalid Card ID.");
+
   return {
     prompt: normalizedPrompt,
-    aspectRatio: typeof raw.aspectRatio === "string" ? raw.aspectRatio : "4:5",
-    style: typeof raw.style === "string" ? raw.style : "minimal",
-    projectId: typeof raw.projectId === "string" ? raw.projectId : "",
-    cardId: typeof raw.cardId === "string" ? raw.cardId : "",
+    aspectRatio,
+    style,
+    projectId,
+    cardId,
   };
 }
 
@@ -193,6 +213,10 @@ export async function POST(req: Request) {
 
     enforceIpRateLimit(req, "generate-image");
 
+    const { prompt, aspectRatio, style, projectId, cardId } =
+      validateImagePayload(await req.json());
+    promptLength = prompt.length;
+
     const db = getFirebaseAdminDb();
 
     if (idempotencyKey) {
@@ -219,6 +243,8 @@ export async function POST(req: Request) {
 
         transaction.set(idKeyRef, {
           status: "pending",
+          projectId,
+          cardId,
           createdAt: FieldValue.serverTimestamp(),
         });
         return { exists: false };
@@ -250,9 +276,7 @@ export async function POST(req: Request) {
       }
     }
 
-    const { prompt, aspectRatio, style, projectId, cardId } =
-      validateImagePayload(await req.json());
-    promptLength = prompt.length;
+
 
     const promptHash = createHash("sha256")
       .update(`${prompt}|${aspectRatio}|${style}`)
@@ -360,7 +384,13 @@ export async function POST(req: Request) {
           success: true,
           inputChars: prompt.length,
           model: selectedModel,
-          metadata: { quotaRemaining },
+          metadata: {
+            quotaRemaining,
+            projectId: projectId || undefined,
+            cardId: cardId || undefined,
+            aspectRatio,
+            style,
+          },
         });
       } catch (err: any) {
         console.error("[generate-image] Generation failed:", err);
@@ -390,6 +420,8 @@ export async function POST(req: Request) {
           status: "completed",
           secureUrl,
           quotaRemaining,
+          projectId,
+          cardId,
           updatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true },

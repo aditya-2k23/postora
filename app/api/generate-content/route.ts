@@ -13,6 +13,7 @@ import {
   recordAiUsageEvent,
   toAiSecurityErrorResponse,
   ValidationError,
+  QuotaExceededError,
 } from "@/lib/server/ai-security";
 
 const GEMINI_TEXT_MODELS = ["gemini-2.5-flash", "gemini-3-flash-preview"];
@@ -93,13 +94,14 @@ function validateGenerateContentPayload(
     );
   }
 
+  const ALLOWED_ASPECT_RATIOS = ["1:1", "4:5", "9:16", "16:9"];
   const normalizedAspectRatio =
     typeof aspectRatio === "string" && aspectRatio.trim()
       ? aspectRatio.trim()
       : "4:5";
-  if (normalizedAspectRatio.length > 20) {
+  if (!ALLOWED_ASPECT_RATIOS.includes(normalizedAspectRatio)) {
     throw new ValidationError(
-      "Aspect ratio is too long. Max length is 20 characters.",
+      `Invalid aspect ratio. Allowed values: ${ALLOWED_ASPECT_RATIOS.join(", ")}`,
     );
   }
 
@@ -612,6 +614,10 @@ export async function POST(req: Request) {
           quotaRemaining: quota.remaining,
         });
       } catch (postError: any) {
+        if (postError instanceof QuotaExceededError || postError?.name === "QuotaExceededError") {
+          throw postError;
+        }
+
         console.error("[generate-content] Post-processing error:", postError);
         return NextResponse.json({
           cards: finalCards,
