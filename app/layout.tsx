@@ -19,8 +19,9 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "Social Media Studio",
-  description: "AI-powered social media generation tool",
+  title: "Postora - AI-powered social media posts generation tool",
+  description:
+    "Postora is an AI-powered tool that generates engaging social media posts in seconds. Create captivating content effortlessly and boost your online presence with Postora.",
 };
 
 export default function RootLayout({
@@ -31,7 +32,12 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={cn("font-sans", inter.variable, poppins.variable, playfair.variable)}
+      className={cn(
+        "font-sans",
+        inter.variable,
+        poppins.variable,
+        playfair.variable,
+      )}
       suppressHydrationWarning
     >
       <body suppressHydrationWarning className="bg-background text-foreground">
