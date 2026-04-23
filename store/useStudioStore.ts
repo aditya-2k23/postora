@@ -237,8 +237,6 @@ export const useStudioStore = create<StudioState>()(
         numCards: state.numCards,
         cards: sanitizePersistedCards(state.cards),
         themeSettings: state.themeSettings,
-        chatHistory: state.chatHistory,
-        assistantHistory: state.assistantHistory,
       }),
     },
   ),

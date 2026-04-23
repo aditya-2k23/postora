@@ -78,7 +78,11 @@ const addElementToLayer = async (element: SlideElement, layer: Layer) => {
         width: element.width,
         fontSize: element.fontSize,
         fontFamily: element.fontFamily,
-        fontStyle: element.fontWeight?.includes("700") ? "bold" : "normal",
+        fontStyle:
+          element.fontWeight?.toLowerCase().includes("bold") ||
+          (parseInt(element.fontWeight || "400", 10) >= 700)
+            ? "bold"
+            : "normal",
         fill: element.fill,
         align: element.align ?? "left",
         lineHeight: element.lineHeight ?? 1.3,
@@ -107,8 +111,35 @@ const addElementToLayer = async (element: SlideElement, layer: Layer) => {
           crop: element.crop,
         }),
       );
-    } catch {
-      return;
+    } catch (err) {
+      console.warn(`[Export] Image failed to load: ${element.src}`, err);
+      // Draw a visible placeholder instead of silently dropping the element
+      layer.add(
+        new Rect({
+          x: element.x,
+          y: element.y,
+          width: element.width,
+          height: element.height,
+          fill: "#e5e7eb", // gray-200
+          stroke: "#d1d5db", // gray-300
+          strokeWidth: 1,
+          cornerRadius: element.cornerRadius ?? 0,
+          rotation: element.rotation ?? 0,
+        }),
+      );
+      layer.add(
+        new Text({
+          x: element.x,
+          y: element.y + element.height / 2 - 6,
+          text: "Image not found",
+          width: element.width,
+          fontSize: 12,
+          fontStyle: "bold",
+          fill: "#6b7280", // gray-500
+          align: "center",
+          rotation: element.rotation ?? 0,
+        }),
+      );
     }
     return;
   }

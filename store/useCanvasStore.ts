@@ -61,14 +61,15 @@ const defaultSlideFromCard = (
   theme: ThemeSettings,
 ): CanvasSlide => {
   const size = getCanvasSize(aspectRatio);
-  const padding = 80;
-  
-  // Professional distribution
-  const titleY = size.height * 0.12;
-  const imageY = size.height * 0.32;
-  const imageWidth = size.width * 0.88;
-  const imageHeight = size.height * 0.45;
-  const bodyY = size.height * 0.82;
+  const padding = theme.padding || 80;
+  const isCompact = theme.layoutEngine === "compact";
+
+  // Calculate vertical distribution based on layout engine
+  const titleY = isCompact ? size.height * 0.08 : size.height * 0.12;
+  const imageY = isCompact ? size.height * 0.22 : size.height * 0.32;
+  const imageWidth = isCompact ? size.width * 0.92 : size.width * 0.88;
+  const imageHeight = isCompact ? size.height * 0.55 : size.height * 0.45;
+  const bodyY = isCompact ? size.height * 0.85 : size.height * 0.82;
 
   const elements: SlideElement[] = [];
 
@@ -83,7 +84,7 @@ const defaultSlideFromCard = (
       width: imageWidth,
       height: imageHeight,
       opacity: 1,
-      cornerRadius: 32,
+      cornerRadius: theme.roundness ?? 32,
     });
   }
 
@@ -94,14 +95,15 @@ const defaultSlideFromCard = (
     text: card.title.toUpperCase(),
     x: padding,
     y: titleY,
-    width: size.width - padding * 2,
-    fontSize: theme.fontSize * 3.5,
+    width: Math.max(100, size.width - padding * 2),
+    fontSize: theme.fontSize * (isCompact ? 3 : 3.5),
     fontFamily: "Poppins",
     fontWeight: "800",
-    fill: "#111827",
+    fill: theme.primaryColor || "#111827",
     align: "center",
     lineHeight: 1.1,
     letterSpacing: 1,
+    role: "title",
   });
 
   // 3. Body (Centered bottom)
@@ -111,13 +113,14 @@ const defaultSlideFromCard = (
     text: card.content,
     x: padding * 1.5,
     y: bodyY,
-    width: size.width - padding * 3,
-    fontSize: theme.fontSize * 1.8,
+    width: Math.max(100, size.width - padding * 3),
+    fontSize: theme.fontSize * (isCompact ? 1.6 : 1.8),
     fontFamily: "Inter",
     fontWeight: "500",
     fill: "#6B7280",
     align: "center",
     lineHeight: 1.5,
+    role: "body",
   });
 
   return {
@@ -303,15 +306,10 @@ export const useCanvasStore = create<CanvasState>()(
           if (!slide) return state;
 
           const titleElement = slide.elements.find(
-            (el) =>
-              el.type === "text" &&
-              (el.fontWeight === "800" || el.fontSize > 40),
+            (el) => el.type === "text" && el.role === "title",
           );
           const bodyElement = slide.elements.find(
-            (el) =>
-              el.type === "text" &&
-              el.id !== titleElement?.id &&
-              (el.fontWeight === "500" || el.fontSize < 40),
+            (el) => el.type === "text" && el.role === "body",
           );
 
           let nextElements = [...slide.elements];

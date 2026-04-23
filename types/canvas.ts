@@ -30,6 +30,7 @@ export type TextElement = {
   opacity?: number;
   locked?: boolean;
   hidden?: boolean;
+  role?: "title" | "body";
 };
 
 export type ImageElement = {
