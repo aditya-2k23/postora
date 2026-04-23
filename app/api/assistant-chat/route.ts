@@ -11,6 +11,7 @@ import {
   recordAiUsageEvent,
   toAiSecurityErrorResponse,
   ValidationError,
+  QuotaExceededError,
 } from "@/lib/server/ai-security";
 
 // Model fallback chain
@@ -424,8 +425,11 @@ export async function POST(req: Request) {
           quotaRemaining: quota.remaining,
         });
       } catch (postError: any) {
+        if (postError instanceof QuotaExceededError) {
+          throw postError;
+        }
         console.error("[assistant-chat] Post-processing error:", postError);
-        // Still return the reply even if quota/telemetry fails
+        // Still return the reply even if telemetry fails
         return NextResponse.json({
           reply: finalReply,
           quotaRemaining: null,

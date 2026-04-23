@@ -166,6 +166,16 @@ export function CanvasStage({
     return () => onStageReady(null);
   }, [onStageReady]);
 
+  useEffect(() => {
+    if (!stageRef.current) return;
+    const container = stageRef.current.container();
+    if (activeTool === "grab") {
+      container.style.cursor = "grab";
+    } else {
+      container.style.cursor = "";
+    }
+  }, [activeTool]);
+
   const textDraftRect = useMemo(() => {
     if (!textDraft || activeTool !== "text") return null;
     return normalizeRect(
@@ -233,7 +243,10 @@ export function CanvasStage({
     };
     onPushHistory();
     onAddElement(element);
-    onCreateText(element.id, element.text);
+    // Give Konva a moment to render the new node before we try to enter edit mode
+    setTimeout(() => {
+      onCreateText(element.id, element.text);
+    }, 50);
   };
 
   const createElementAtPoint = (x: number, y: number) => {
@@ -450,11 +463,11 @@ export function CanvasStage({
       className="relative w-full h-full bg-muted/20 overflow-hidden select-none"
       style={{
         cursor:
-          activeTool === "text"
-            ? "crosshair"
-            : activeTool === "grab"
-              ? "grab"
-              : "default",
+          activeTool === "grab"
+            ? "grab"
+            : activeTool === "select"
+              ? "default"
+              : "crosshair",
       }}
       onContextMenu={(evt) => {
         evt.preventDefault();

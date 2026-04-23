@@ -49,7 +49,7 @@ const tools: Array<{
   shortcut?: string;
 }> = [
   { id: "select", label: "Select", icon: MousePointer2, shortcut: "V" },
-  { id: "grab", label: "Grab", icon: Hand, shortcut: "H" },
+  { id: "grab", label: "Grab", icon: Hand, shortcut: "G" },
   { id: "text", label: "Text", icon: Type, shortcut: "T" },
   { id: "shape", label: "Shape", icon: Square },
   { id: "image", label: "Image", icon: Wallpaper },

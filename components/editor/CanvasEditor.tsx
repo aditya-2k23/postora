@@ -192,7 +192,7 @@ export function CanvasEditor() {
           setActiveTool("text");
           return;
         }
-        if (key === "h") {
+        if (key === "g") {
           setActiveTool("grab");
           return;
         }
