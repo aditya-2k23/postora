@@ -29,6 +29,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  ALLOWED_ASPECT_RATIOS,
+  ASPECT_RATIO_LABELS,
+} from "@/lib/constants";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { toast } from "sonner";
@@ -802,18 +806,15 @@ export function LeftSidebar() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="1:1" className="text-xs">
-                            1:1 Square
-                          </SelectItem>
-                          <SelectItem value="4:5" className="text-xs">
-                            4:5 Portrait
-                          </SelectItem>
-                          <SelectItem value="9:16" className="text-xs">
-                            9:16 Story
-                          </SelectItem>
-                          <SelectItem value="16:9" className="text-xs">
-                            16:9 Landscape
-                          </SelectItem>
+                          {ALLOWED_ASPECT_RATIOS.map((ratio) => (
+                            <SelectItem
+                              key={ratio}
+                              value={ratio}
+                              className="text-xs"
+                            >
+                              {ASPECT_RATIO_LABELS[ratio]}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>

@@ -18,6 +18,7 @@ import {
   toAiSecurityErrorResponse,
   ValidationError,
 } from "@/lib/server/ai-security";
+import { ALLOWED_ASPECT_RATIOS } from "@/lib/constants";
 
 // ─── Cloudinary setup
 (function validateAndConfigureCloudinary() {
@@ -98,7 +99,6 @@ type ImagePayload = {
   cardId: string;
 };
 
-const ALLOWED_ASPECT_RATIOS = ["1:1", "4:5", "9:16", "16:9"];
 
 function validateImagePayload(payload: unknown): ImagePayload {
   if (!payload || typeof payload !== "object") {
@@ -119,7 +119,7 @@ function validateImagePayload(payload: unknown): ImagePayload {
   }
 
   const aspectRatio = typeof raw.aspectRatio === "string" ? raw.aspectRatio : "4:5";
-  if (!ALLOWED_ASPECT_RATIOS.includes(aspectRatio)) {
+  if (!ALLOWED_ASPECT_RATIOS.includes(aspectRatio as any)) {
     throw new ValidationError(
       `Invalid aspect ratio. Allowed values: ${ALLOWED_ASPECT_RATIOS.join(", ")}`,
     );

@@ -15,6 +15,7 @@ import {
   ValidationError,
   QuotaExceededError,
 } from "@/lib/server/ai-security";
+import { ALLOWED_ASPECT_RATIOS } from "@/lib/constants";
 
 const GEMINI_TEXT_MODELS = ["gemini-2.5-flash", "gemini-3-flash-preview"];
 
@@ -94,12 +95,12 @@ function validateGenerateContentPayload(
     );
   }
 
-  const ALLOWED_ASPECT_RATIOS = ["1:1", "4:5", "9:16", "16:9"];
   const normalizedAspectRatio =
     typeof aspectRatio === "string" && aspectRatio.trim()
       ? aspectRatio.trim()
       : "4:5";
-  if (!ALLOWED_ASPECT_RATIOS.includes(normalizedAspectRatio)) {
+
+  if (!ALLOWED_ASPECT_RATIOS.includes(normalizedAspectRatio as any)) {
     throw new ValidationError(
       `Invalid aspect ratio. Allowed values: ${ALLOWED_ASPECT_RATIOS.join(", ")}`,
     );
