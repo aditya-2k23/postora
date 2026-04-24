@@ -28,7 +28,8 @@ function extractPublicId(url: string): string | null {
     // Transformation segments usually have keys like w_ or contain commas.
     // Version segments match a strict ^v\d+$ pattern.
     const afterUpload = parts.slice(uploadIndex + 1).join("/");
-    const regex = /^(?:(?:[a-z]{1,2}_[^\/]+\/|[^\/]+,[^\/]+\/)*?)(?:v\d+\/)?([^\?#]+)$/i;
+    const regex =
+      /^(?:(?:[a-z]{1,2}_[^\/]+\/|[^\/]+,[^\/]+\/)*?)(?:v\d+\/)?([^\?#]+)$/i;
     const match = afterUpload.match(regex);
 
     if (!match) return null;
@@ -54,12 +55,15 @@ export async function POST(req: Request) {
     const { projectId, imageUrls = [] } = await req.json();
 
     if (!projectId) {
-      return NextResponse.json({ error: "Project ID is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Project ID is required" },
+        { status: 400 },
+      );
     }
 
     const db = getFirebaseAdminDb();
     const projectRef = db.doc(`users/${uid}/projects/${projectId}`);
-    
+
     // 1. Get project data to find any image URLs if not provided
     const projectSnap = await projectRef.get();
     if (!projectSnap.exists) {
@@ -82,7 +86,11 @@ export async function POST(req: Request) {
     if (projectData?.canvas?.slidesByCardId) {
       Object.values(projectData.canvas.slidesByCardId).forEach((slide: any) => {
         slide.elements?.forEach((el: any) => {
-          if (el.type === "image" && el.src && el.src.includes("cloudinary.com")) {
+          if (
+            el.type === "image" &&
+            el.src &&
+            el.src.includes("cloudinary.com")
+          ) {
             allImageUrls.push(el.src);
           }
         });
@@ -96,28 +104,43 @@ export async function POST(req: Request) {
 
     // 2. Extract and validate unique public IDs
     // We strictly enforce that the public ID starts with the user's scoped folder.
-    const allowedPrefixes = [`postora_images/${uid}/`, `postora_uploads/${uid}/` ];
-    
-    const publicIds = Array.from(new Set(
-      allImageUrls
-        .map(extractPublicId)
-        .filter((id): id is string => {
+    const allowedPrefixes = [
+      `postora_images/${uid}/`,
+      `postora_uploads/${uid}/`,
+    ];
+
+    const publicIds = Array.from(
+      new Set(
+        allImageUrls.map(extractPublicId).filter((id): id is string => {
           if (!id) return false;
           // Security check: ensure the image belongs to the current user
-          return allowedPrefixes.some(prefix => id.startsWith(prefix));
-        })
-    ));
+          return allowedPrefixes.some((prefix) => id.startsWith(prefix));
+        }),
+      ),
+    );
 
-    console.log(`[delete-project] Deleting ${publicIds.length} images from Cloudinary for project ${projectId}`);
+    console.log(
+      `[delete-project] Deleting ${publicIds.length} images from Cloudinary for project ${projectId}`,
+    );
 
     // 3. Delete from Cloudinary
-    if (publicIds.length > 0) {
+    const BATCH = 100;
+    for (let i = 0; i < publicIds.length; i += BATCH) {
+      const chunk = publicIds.slice(i, i + BATCH);
       try {
-        // cloudinary.api.delete_resources is capped at 1000 IDs per call.
-        await cloudinary.api.delete_resources(publicIds);
+        const res = await cloudinary.api.delete_resources(chunk);
+        if (res && Object.keys(res.deleted || {}).length === 0) {
+          console.warn(
+            "[delete-project] Cloudinary deletion returned no deletions for batch:",
+            res,
+          );
+        }
       } catch (cloudinaryError) {
-        console.error("[delete-project] Cloudinary deletion failed:", cloudinaryError);
-        // We continue anyway to delete the project doc
+        console.error(
+          "[delete-project] Cloudinary deletion failed for batch:",
+          cloudinaryError,
+        );
+        // Continue with remaining batches and Firestore cleanup
       }
     }
 
@@ -125,7 +148,7 @@ export async function POST(req: Request) {
     await projectRef.delete();
 
     // 5. Delete associated subcollections if any (we don't have any right now according to blueprint)
-    
+
     return NextResponse.json({ success: true });
   } catch (error: any) {
     const authError = toApiAuthErrorResponse(error);
@@ -134,7 +157,7 @@ export async function POST(req: Request) {
     console.error("[delete-project] Error:", error);
     return NextResponse.json(
       { error: "Failed to delete project. Please try again later." },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
