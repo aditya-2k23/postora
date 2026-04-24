@@ -79,8 +79,13 @@ export function RightSidebar() {
           pushHistory();
           setBackgroundColor(color);
         }}
-        onUpdateElement={(id, updates, applyScope = "single") => {
-          pushHistory();
+        onUpdateElement={(id, updates, options) => {
+          const { applyScope = "single", pushHistory: shouldPush = false } =
+            options || {};
+
+          if (shouldPush || applyScope === "matching-selection") {
+            pushHistory();
+          }
 
           if (applyScope === "matching-selection") {
             const source = slide.elements.find((el) => el.id === id);
@@ -103,6 +108,13 @@ export function RightSidebar() {
           }
 
           updateElement(id, updates);
+
+          // Sync back to card store if it's a role-based text element
+          if (updates.text !== undefined && slideId) {
+            const el = slide.elements.find((e) => e.id === id);
+            if (el?.role === "title") updateCard(slideId, { title: updates.text });
+            if (el?.role === "body") updateCard(slideId, { content: updates.text });
+          }
         }}
         onAlign={(dir) => {
           pushHistory();

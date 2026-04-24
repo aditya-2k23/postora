@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Plus, Replace, WandSparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { SlideElement } from "@/types/canvas";
@@ -15,7 +15,10 @@ type Props = {
   onUpdateElement: (
     id: string,
     updates: Partial<SlideElement>,
-    applyScope?: "single" | "matching-selection",
+    options?: {
+      applyScope?: "single" | "matching-selection";
+      pushHistory?: boolean;
+    },
   ) => void;
   onAlign: (dir: "left" | "right" | "top" | "bottom" | "center") => void;
   onDistribute: (axis: "horizontal" | "vertical") => void;
@@ -57,9 +60,16 @@ export function CanvasSidebar({
   onAddElement,
   isRegenerating = false,
 }: Props) {
+  const lastSelectedIdRef = useRef<string | null>(selectedIds[0] || null);
+
+  useEffect(() => {
+    if (selectedIds[0]) {
+      lastSelectedIdRef.current = selectedIds[0];
+    }
+  }, [selectedIds]);
+
   const selected = slideElements.find((el) => selectedIds[0] === el.id);
-  const selectedText =
-    selected?.type === "text" ? (selected as any) : null;
+  const selectedText = selected?.type === "text" ? (selected as any) : null;
 
   // Local state for color inputs to prevent flooding
   const [localCanvasBg, setLocalCanvasBg] = useState(backgroundColor);
@@ -75,21 +85,48 @@ export function CanvasSidebar({
     }
   }, [selected?.id, selectedText?.fill]);
 
+  const [localText, setLocalText] = useState(selectedText?.text || "");
+
+  // Refs to keep global listeners updated without re-binding
+  const localTextRef = useRef(localText);
+  const localFillRef = useRef(localFill);
+  const localCanvasBgRef = useRef(localCanvasBg);
+
+  useEffect(() => {
+    localTextRef.current = localText;
+  }, [localText]);
+
+  useEffect(() => {
+    localFillRef.current = localFill;
+  }, [localFill]);
+
+  useEffect(() => {
+    localCanvasBgRef.current = localCanvasBg;
+  }, [localCanvasBg]);
+
   const selectedElements = slideElements.filter((el) =>
     selectedIds.includes(el.id),
   );
+
   const hasMultiSameTypeSelection =
     selectedElements.length > 1 &&
     selectedElements.every((el) => el.type === selectedElements[0].type);
 
+  useEffect(() => {
+    if (selectedText?.text !== undefined) {
+      setLocalText(selectedText.text);
+    }
+  }, [selected?.id, selectedText?.text]);
+
   const applyStyleUpdate = useCallback(
-    (updates: Partial<SlideElement>) => {
-      if (!selected) return;
-      onUpdateElement(
-        selected.id,
-        updates,
-        hasMultiSameTypeSelection ? "matching-selection" : "single",
-      );
+    (updates: Partial<SlideElement>, pushHistory = true) => {
+      const targetId = selected?.id || lastSelectedIdRef.current;
+      if (!targetId) return;
+
+      onUpdateElement(targetId, updates, {
+        applyScope: hasMultiSameTypeSelection ? "matching-selection" : "single",
+        pushHistory,
+      });
     },
     [onUpdateElement, selected, hasMultiSameTypeSelection],
   );
@@ -99,30 +136,54 @@ export function CanvasSidebar({
     const handleGlobalMouseDown = (e: MouseEvent) => {
       // If clicking outside the sidebar or on the canvas, commit the local color
       const target = e.target as HTMLElement;
-      const isSidebar = target.closest(".canvas-sidebar");
-      const isColorInput =
-        target.tagName === "INPUT" && (target as HTMLInputElement).type === "color";
+      const isInput =
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.closest("select");
 
-      if (!isSidebar && !isColorInput) {
-        if (selectedText && localFill !== selectedText.fill) {
-          applyStyleUpdate({ fill: localFill });
+      if (!isInput) {
+        const commitId = lastSelectedIdRef.current;
+        const original = slideElements.find((el) => el.id === commitId);
+
+        if (commitId && original) {
+          if (
+            original.type === "text" &&
+            localFillRef.current !== original.fill
+          ) {
+            onUpdateElement(
+              commitId,
+              { fill: localFillRef.current },
+              {
+                applyScope: "single",
+                pushHistory: true,
+              },
+            );
+          }
+          if (
+            original.type === "text" &&
+            localTextRef.current !== original.text
+          ) {
+            onUpdateElement(
+              commitId,
+              { text: localTextRef.current },
+              {
+                applyScope: "single",
+                pushHistory: true,
+              },
+            );
+          }
         }
-        if (localCanvasBg !== backgroundColor) {
-          onBackgroundColor(localCanvasBg);
+
+        if (localCanvasBgRef.current !== backgroundColor) {
+          onBackgroundColor(localCanvasBgRef.current);
         }
       }
     };
 
     window.addEventListener("mousedown", handleGlobalMouseDown);
     return () => window.removeEventListener("mousedown", handleGlobalMouseDown);
-  }, [
-    localFill,
-    selectedText,
-    localCanvasBg,
-    backgroundColor,
-    applyStyleUpdate,
-    onBackgroundColor,
-  ]);
+  }, [backgroundColor, onBackgroundColor, onUpdateElement, slideElements]);
 
   const parseNumericInput = (value: string): number | null => {
     const trimmed = value.trim();
@@ -140,7 +201,9 @@ export function CanvasSidebar({
   };
 
   const commitFontSize = (value: string, inputEl: HTMLInputElement) => {
-    if (!selectedText) return;
+    const targetId = selected?.id || lastSelectedIdRef.current;
+    const el = slideElements.find((e) => e.id === targetId);
+    if (el?.type !== "text") return;
     const parsed = parseNumericInput(value);
     if (parsed === null) {
       inputEl.value = String(selectedText.fontSize);
@@ -151,9 +214,11 @@ export function CanvasSidebar({
   };
 
   const commitLineHeight = (value: string, inputEl: HTMLInputElement) => {
-    if (!selectedText) return;
+    const targetId = selected?.id || lastSelectedIdRef.current;
+    const el = slideElements.find((e) => e.id === targetId);
+    if (el?.type !== "text") return;
     const parsed = parseNumericInput(value);
-    const fallback = selectedText.lineHeight ?? 1.3;
+    const fallback = el.lineHeight ?? 1.3;
     if (parsed === null) {
       inputEl.value = String(fallback);
       return;
@@ -163,9 +228,11 @@ export function CanvasSidebar({
   };
 
   const commitLetterSpacing = (value: string, inputEl: HTMLInputElement) => {
-    if (!selectedText) return;
+    const targetId = selected?.id || lastSelectedIdRef.current;
+    const el = slideElements.find((e) => e.id === targetId);
+    if (el?.type !== "text") return;
     const parsed = parseNumericInput(value);
-    const fallback = selectedText.letterSpacing ?? 0;
+    const fallback = el.letterSpacing ?? 0;
     if (parsed === null) {
       inputEl.value = String(fallback);
       return;
@@ -198,7 +265,8 @@ export function CanvasSidebar({
               type="button"
               className="inline-flex h-7 items-center rounded-md border border-border/80 px-2 text-[10px] font-semibold tracking-wide text-foreground/90 transition-colors hover:bg-muted/70"
               onClick={(e) => {
-                const input = e.currentTarget.nextElementSibling as HTMLInputElement;
+                const input = e.currentTarget
+                  .nextElementSibling as HTMLInputElement;
                 input.click();
               }}
             >
@@ -269,7 +337,8 @@ export function CanvasSidebar({
                   "ring-2 ring-primary ring-offset-2",
               )}
               onClick={(e) => {
-                const input = e.currentTarget.nextElementSibling as HTMLInputElement;
+                const input = e.currentTarget
+                  .nextElementSibling as HTMLInputElement;
                 input.click();
               }}
             >
@@ -378,10 +447,27 @@ export function CanvasSidebar({
             Text
           </p>
           <textarea
-            value={selected.text}
-            onChange={(evt) =>
-              onUpdateElement(selected.id, { text: evt.target.value }, "single")
-            }
+            value={localText}
+            onChange={(evt) => setLocalText(evt.target.value)}
+            onBlur={() => {
+              const commitId = lastSelectedIdRef.current;
+              const original = slideElements.find((el) => el.id === commitId);
+              if (
+                commitId &&
+                original &&
+                original.type === "text" &&
+                localText !== original.text
+              ) {
+                onUpdateElement(
+                  commitId,
+                  { text: localText },
+                  {
+                    applyScope: "single",
+                    pushHistory: true,
+                  },
+                );
+              }
+            }}
             className="w-full min-h-20 rounded-md border border-border bg-background px-2 py-1 text-xs"
           />
           <div className="grid grid-cols-2 gap-2">
@@ -434,7 +520,11 @@ export function CanvasSidebar({
                   onUpdateElement(
                     selected.id,
                     { fill: color },
-                    hasMultiSameTypeSelection ? "matching-selection" : "single",
+                    {
+                      applyScope: hasMultiSameTypeSelection
+                        ? "matching-selection"
+                        : "single",
+                    },
                   );
                 }}
               />
@@ -453,7 +543,11 @@ export function CanvasSidebar({
                   onUpdateElement(
                     selected.id,
                     { fill: color },
-                    hasMultiSameTypeSelection ? "matching-selection" : "single",
+                    {
+                      applyScope: hasMultiSameTypeSelection
+                        ? "matching-selection"
+                        : "single",
+                    },
                   );
                 }}
               />
@@ -465,18 +559,18 @@ export function CanvasSidebar({
                     !["#000000", "#ffffff"].includes(normalizeColor(localFill))
                   }
                   className={cn(
-                    "h-full w-full rounded-full border border-border transition-all hover:scale-110 shadow-sm flex items-center justify-center overflow-hidden",
+                    "h-full w-full rounded-full border border-dashed border-border/80 text-muted-foreground transition-all hover:bg-muted/70 hover:text-foreground hover:scale-110 flex items-center justify-center overflow-hidden",
                     !["#000000", "#ffffff"].includes(
                       normalizeColor(localFill),
                     ) && "ring-2 ring-primary ring-offset-2",
                   )}
-                  style={{ backgroundColor: localFill }}
                   onClick={(e) => {
-                    const input = e.currentTarget.nextElementSibling as HTMLInputElement;
+                    const input = e.currentTarget
+                      .nextElementSibling as HTMLInputElement;
                     input.click();
                   }}
                 >
-                  <Plus className="w-3.5 h-3.5 mix-blend-difference invert" />
+                  <Plus className="w-3.5 h-3.5" />
                 </button>
                 <input
                   type="color"
@@ -485,10 +579,14 @@ export function CanvasSidebar({
                     setLocalFill(normalizeColor(evt.target.value))
                   }
                   onBlur={() => {
+                    const commitId = lastSelectedIdRef.current;
+                    const original = slideElements.find(
+                      (el) => el.id === commitId,
+                    );
                     if (
-                      selectedText &&
+                      original?.type === "text" &&
                       normalizeColor(localFill) !==
-                        normalizeColor(selectedText.fill)
+                        normalizeColor(original.fill)
                     ) {
                       applyStyleUpdate({ fill: normalizeColor(localFill) });
                     }

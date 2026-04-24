@@ -2,7 +2,11 @@
 
 import { useEffect, useState, useRef } from "react";
 import type Konva from "konva";
-import { ASPECT_RATIO_DIMENSIONS, type AspectRatio } from "@/types/canvas";
+import {
+  ASPECT_RATIO_DIMENSIONS,
+  SlideElement,
+  type AspectRatio,
+} from "@/types/canvas";
 import { useShallow } from "zustand/shallow";
 import { useCanvasStore } from "@/store/useCanvasStore";
 import { useStudioStore } from "@/store/useStudioStore";
@@ -11,27 +15,27 @@ import { CanvasStage } from "@/components/editor/CanvasStage";
 import { TextEditorOverlay } from "@/components/editor/TextEditorOverlay";
 import { LayoutTemplate } from "lucide-react";
 
-const isTypingTarget = (target: EventTarget | null) => {
-  if (!(target instanceof HTMLElement)) return false;
-
-  const tag = target.tagName;
+const isTypingTarget = (target: any) => {
+  if (!target) return false;
+  const tag = target.tagName?.toUpperCase();
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
     return true;
   }
-
   if (target.isContentEditable) return true;
-  return Boolean(target.closest("[contenteditable='true']"));
+  return !!(target.closest && target.closest("[contenteditable='true']"));
 };
 
 export function CanvasEditor() {
-  const { cards, activeCardId, aspectRatio, themeSettings } = useStudioStore(
-    useShallow((s) => ({
-      cards: s.cards,
-      activeCardId: s.activeCardId,
-      aspectRatio: s.aspectRatio,
-      themeSettings: s.themeSettings,
-    })),
-  );
+  const { cards, activeCardId, aspectRatio, updateCard, themeSettings } =
+    useStudioStore(
+      useShallow((s) => ({
+        cards: s.cards,
+        activeCardId: s.activeCardId,
+        aspectRatio: s.aspectRatio,
+        updateCard: s.updateCard,
+        themeSettings: s.themeSettings,
+      })),
+    );
 
   const {
     slidesByCardId,
@@ -44,22 +48,6 @@ export function CanvasEditor() {
     gridEnabled,
     rulerEnabled,
     textEditing,
-  } = useCanvasStore(
-    useShallow((s) => ({
-      slidesByCardId: s.slidesByCardId,
-      currentSlideId: s.currentSlideId,
-      selectedElementIds: s.selectedElementIds,
-      activeTool: s.activeTool,
-      clipboard: s.clipboard,
-      historyPast: s.historyPast,
-      historyFuture: s.historyFuture,
-      gridEnabled: s.gridEnabled,
-      rulerEnabled: s.rulerEnabled,
-      textEditing: s.textEditing,
-    })),
-  );
-
-  const {
     ensureSlidesFromCards,
     syncCardContent,
     syncCardImage,
@@ -85,7 +73,45 @@ export function CanvasEditor() {
     setStageRef,
     startTextEditing,
     stopTextEditing,
-  } = useCanvasStore.getState();
+  } = useCanvasStore(
+    useShallow((s) => ({
+      slidesByCardId: s.slidesByCardId,
+      currentSlideId: s.currentSlideId,
+      selectedElementIds: s.selectedElementIds,
+      activeTool: s.activeTool,
+      clipboard: s.clipboard,
+      historyPast: s.historyPast,
+      historyFuture: s.historyFuture,
+      gridEnabled: s.gridEnabled,
+      rulerEnabled: s.rulerEnabled,
+      textEditing: s.textEditing,
+      ensureSlidesFromCards: s.ensureSlidesFromCards,
+      syncCardContent: s.syncCardContent,
+      syncCardImage: s.syncCardImage,
+      setCurrentSlideId: s.setCurrentSlideId,
+      setSelectedElementIds: s.setSelectedElementIds,
+      toggleSelectedElementId: s.toggleSelectedElementId,
+      clearSelection: s.clearSelection,
+      setActiveTool: s.setActiveTool,
+      addElement: s.addElement,
+      updateElement: s.updateElement,
+      pushHistory: s.pushHistory,
+      deleteSelected: s.deleteSelected,
+      duplicateSelected: s.duplicateSelected,
+      copySelected: s.copySelected,
+      pasteClipboard: s.pasteClipboard,
+      moveSelectedBy: s.moveSelectedBy,
+      bringForward: s.bringForward,
+      sendBackward: s.sendBackward,
+      undo: s.undo,
+      redo: s.redo,
+      setGridEnabled: s.setGridEnabled,
+      setRulerEnabled: s.setRulerEnabled,
+      setStageRef: s.setStageRef,
+      startTextEditing: s.startTextEditing,
+      stopTextEditing: s.stopTextEditing,
+    })),
+  );
 
   const [stage, setStage] = useState<Konva.Stage | null>(null);
   const slideId = activeCardId ?? currentSlideId;
@@ -265,8 +291,8 @@ export function CanvasEditor() {
       }
     };
 
-    window.addEventListener("keydown", handler, true); // Use capture to intercept before browser defaults
-    return () => window.removeEventListener("keydown", handler, true);
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   }, [
     copySelected,
     pasteClipboard,
@@ -374,9 +400,10 @@ export function CanvasEditor() {
           onCommit={(value) => {
             if (!textEditing?.elementId) return;
             const currentText = slide.elements.find(
-              (el) => el.type === "text" && el.id === textEditing.elementId,
+              (el): el is Extract<SlideElement, { type: "text" }> =>
+                el.type === "text" && el.id === textEditing.elementId,
             );
-            if (currentText?.type !== "text") {
+            if (!currentText) {
               stopTextEditing();
               return;
             }
@@ -386,6 +413,16 @@ export function CanvasEditor() {
             }
             pushHistory();
             updateElement(textEditing.elementId, { text: value });
+
+            // Sync back to card
+            if (activeCardId) {
+              if (currentText.role === "title") {
+                updateCard(activeCardId, { title: value });
+              } else if (currentText.role === "body") {
+                updateCard(activeCardId, { content: value });
+              }
+            }
+
             stopTextEditing();
           }}
           onCancel={stopTextEditing}
