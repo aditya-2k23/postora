@@ -216,6 +216,17 @@ export const exportToPNG = async () => {
   const slides = await getAllSlideExports();
   if (slides.length === 0) throw new Error("No slides found");
 
+  // Short-circuit for single slide export
+  if (slides.length === 1) {
+    const link = document.createElement("a");
+    link.href = slides[0].dataUrl;
+    link.download = "social-card.png";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    return;
+  }
+
   const zip = new JSZip();
 
   for (let i = 0; i < slides.length; i += 1) {
@@ -226,7 +237,7 @@ export const exportToPNG = async () => {
 
   const content = await zip.generateAsync({ type: "blob" });
   const url = URL.createObjectURL(content);
-  
+
   const link = document.createElement("a");
   link.href = url;
   link.download = "social-cards.zip";
