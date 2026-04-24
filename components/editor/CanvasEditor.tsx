@@ -110,11 +110,17 @@ export function CanvasEditor() {
     cards.forEach((card) => {
       syncCardContent(card);
 
-      const slide = slidesByCardId[card.id];
-      const hasImage = slide?.elements.some((el) => el.type === "image");
+      const cardSlide = slidesByCardId[card.id];
+      if (!cardSlide) return;
 
-      // Only auto-sync image if the slide has no image yet and card has one
-      if (card.imageUrl && !hasImage) {
+      const hasImage = cardSlide.elements.some((el) => el.type === "image");
+      const isUnpopulated =
+        cardSlide.elements.length === 0 ||
+        cardSlide.metadata?.autoSynced === undefined;
+
+      // Only auto-sync image if card has one and the slide hasn't been synced or is empty
+      // This prevents resurrecting images the user might have deleted.
+      if (card.imageUrl && !hasImage && isUnpopulated) {
         syncCardImage(card.id, card.imageUrl);
       }
     });
@@ -182,6 +188,20 @@ export function CanvasEditor() {
         return;
       }
 
+      // Grid/Ruler shortcuts (Shift + G / Shift + R)
+      if (evt.shiftKey && !isMeta) {
+        if (key === "g") {
+          evt.preventDefault();
+          setGridEnabled(!gridEnabled);
+          return;
+        }
+        if (key === "r") {
+          evt.preventDefault();
+          setRulerEnabled(!rulerEnabled);
+          return;
+        }
+      }
+
       // Tool selection shortcuts
       if (!isMeta) {
         if (key === "v" || key === "escape") {
@@ -194,20 +214,6 @@ export function CanvasEditor() {
         }
         if (key === "g") {
           setActiveTool("grab");
-          return;
-        }
-      }
-
-      // Grid/Ruler shortcuts (Shift + G / Shift + R)
-      if (evt.shiftKey && !isMeta) {
-        if (key === "g") {
-          evt.preventDefault();
-          setGridEnabled(!gridEnabled);
-          return;
-        }
-        if (key === "r") {
-          evt.preventDefault();
-          setRulerEnabled(!rulerEnabled);
           return;
         }
       }

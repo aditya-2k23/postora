@@ -317,7 +317,10 @@ export const useCanvasStore = create<CanvasState>()(
           const bodyElement =
             slide.elements.find(
               (el) => el.type === "text" && el.role === "body",
-            ) || [...slide.elements].reverse().find((el) => el.type === "text");
+            ) ||
+            [...slide.elements]
+              .reverse()
+              .find((el) => el.type === "text" && el !== titleElement);
 
           let nextElements = [...slide.elements];
           let changed = false;
@@ -376,6 +379,7 @@ export const useCanvasStore = create<CanvasState>()(
                 ...state.slidesByCardId,
                 [cardId]: {
                   ...slide,
+                  metadata: { ...slide.metadata, autoSynced: true },
                   elements: slide.elements.map((el) =>
                     el.id === existingImage.id ? { ...el, src: imageUrl } : el,
                   ),
@@ -409,6 +413,7 @@ export const useCanvasStore = create<CanvasState>()(
               ...state.slidesByCardId,
               [cardId]: {
                 ...slide,
+                metadata: { ...slide.metadata, autoSynced: true },
                 elements: [newImage, ...slide.elements], // Add to bottom (background-ish)
               },
             },

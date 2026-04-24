@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { useStudioStore } from "@/store/useStudioStore";
 import { useShallow } from "zustand/shallow";
@@ -72,6 +72,28 @@ export function StudioNavbar() {
   const gridEnabled = useCanvasStore((s) => s.gridEnabled);
   const rulerEnabled = useCanvasStore((s) => s.rulerEnabled);
   const [isSaving, setIsSaving] = useState(false);
+  const [lastSavedState, setLastSavedState] = useState<{
+    assistantHistoryLength: number;
+    chatHistoryLength: number;
+  }>({
+    assistantHistoryLength: assistantHistory.length,
+    chatHistoryLength: chatHistory.length,
+  });
+
+  // Reset dirty state when a new project is loaded
+  useEffect(() => {
+    if (projectId) {
+      setLastSavedState({
+        assistantHistoryLength: assistantHistory.length,
+        chatHistoryLength: chatHistory.length,
+      });
+    }
+  }, [projectId]);
+
+  const isDirty =
+    !projectId ||
+    assistantHistory.length !== lastSavedState.assistantHistoryLength ||
+    chatHistory.length !== lastSavedState.chatHistoryLength;
 
   const handleSaveProject = async () => {
     if (isSaving) return;
@@ -128,6 +150,11 @@ export function StudioNavbar() {
       if (!projectId) {
         setProjectId(pId);
       }
+
+      setLastSavedState({
+        assistantHistoryLength: assistantHistory.length,
+        chatHistoryLength: chatHistory.length,
+      });
 
       toast.success("Project saved securely to cloud!");
     } catch (e: any) {
@@ -233,11 +260,13 @@ export function StudioNavbar() {
 
         {/* Save */}
         <div className="relative flex items-center">
-          {!projectId && (assistantHistory.length >= 2 || chatHistory.length >= 4) && (
-            <span className="absolute right-full mr-2 hidden md:block whitespace-nowrap text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-full animate-in fade-in slide-in-from-right-1">
-              Save to keep history
-            </span>
-          )}
+          {isDirty &&
+            !isSaving &&
+            (assistantHistory.length >= 2 || chatHistory.length >= 4) && (
+              <span className="absolute top-[calc(100%+4px)] right-[-30px] whitespace-nowrap text-[9px] font-medium text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded shadow-sm animate-in fade-in slide-in-from-top-1">
+                {projectId ? "Unsaved changes" : "Save to keep history"}
+              </span>
+            )}
           <Button
             variant="ghost"
             size="icon"
@@ -247,7 +276,8 @@ export function StudioNavbar() {
             disabled={isSaving}
           >
             <Save className={cn("w-4 h-4", isSaving && "animate-pulse")} />
-            {!projectId &&
+            {isDirty &&
+              !isSaving &&
               (assistantHistory.length >= 2 || chatHistory.length >= 4) && (
                 <span className="absolute top-1 right-1 w-2 h-2 bg-amber-500 rounded-full border-2 border-card" />
               )}

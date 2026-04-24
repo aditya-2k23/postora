@@ -81,6 +81,9 @@ export type CanvasSlide = {
   cardId: string;
   backgroundColor: string;
   elements: SlideElement[];
+  metadata?: {
+    autoSynced?: boolean;
+  };
 };
 
 export type CanvasHistorySnapshot = {
