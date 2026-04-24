@@ -14,6 +14,7 @@ import {
   type AspectRatio,
   type SlideElement,
 } from "@/types/canvas";
+import { isBoldWeight } from "./typography";
 
 const loadImage = (src: string) =>
   new Promise<HTMLImageElement>((resolve, reject) => {
@@ -78,11 +79,7 @@ const addElementToLayer = async (element: SlideElement, layer: Layer) => {
         width: element.width,
         fontSize: element.fontSize,
         fontFamily: element.fontFamily,
-        fontStyle:
-          element.fontWeight?.toLowerCase().includes("bold") ||
-          (parseInt(element.fontWeight || "400", 10) >= 700)
-            ? "bold"
-            : "normal",
+        fontStyle: isBoldWeight(element.fontWeight) ? "bold" : "normal",
         fill: element.fill,
         align: element.align ?? "left",
         lineHeight: element.lineHeight ?? 1.3,
@@ -244,7 +241,7 @@ export const exportToPNG = async () => {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 100);
 };
 
 export const exportToPDF = async () => {

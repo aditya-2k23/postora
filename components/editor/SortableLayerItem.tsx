@@ -58,9 +58,18 @@ export function SortableLayerItem({
     <div
       ref={setNodeRef}
       style={style}
+      role="button"
+      tabIndex={0}
+      aria-pressed={isSelected}
       onClick={() => onSelect(element.id)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(element.id);
+        }
+      }}
       className={cn(
-        "w-full rounded-md border px-2 py-1.5 text-[11px] flex items-center justify-between gap-2 transition-colors duration-200 group cursor-pointer",
+        "w-full rounded-md border px-2 py-1.5 text-[11px] flex items-center justify-between gap-2 transition-colors duration-200 group cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:border-primary/50",
         isSelected
           ? "border-primary/50 bg-primary/10 text-foreground ring-1 ring-primary/20"
           : "border-border bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/50",
