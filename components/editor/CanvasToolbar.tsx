@@ -214,7 +214,7 @@ export function CanvasToolbar({
                 : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/60 hover:border-border",
             )}
             onClick={onToggleGrid}
-            title="Toggle Grid (G)"
+            title="Toggle Grid (Shift+G)"
           >
             <Grid2X2 className="w-3.5 h-3.5" />
             Grid
@@ -229,7 +229,7 @@ export function CanvasToolbar({
                 : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/60 hover:border-border",
             )}
             onClick={onToggleRuler}
-            title="Toggle Ruler (R)"
+            title="Toggle Ruler (Shift+R)"
           >
             <Ruler className="w-3.5 h-3.5" />
             Ruler

@@ -198,6 +198,20 @@ export function CanvasEditor() {
         }
       }
 
+      // Grid/Ruler shortcuts (Shift + G / Shift + R)
+      if (evt.shiftKey && !isMeta) {
+        if (key === "g") {
+          evt.preventDefault();
+          setGridEnabled(!gridEnabled);
+          return;
+        }
+        if (key === "r") {
+          evt.preventDefault();
+          setRulerEnabled(!rulerEnabled);
+          return;
+        }
+      }
+
       // Slide-specific actions
       const currentSlide = slideRef.current;
       if (!currentSlide) return;
@@ -257,6 +271,10 @@ export function CanvasEditor() {
     redo,
     setActiveTool,
     moveSelectedBy,
+    gridEnabled,
+    rulerEnabled,
+    setGridEnabled,
+    setRulerEnabled,
   ]);
 
   if (!cards.length || !slide) {
