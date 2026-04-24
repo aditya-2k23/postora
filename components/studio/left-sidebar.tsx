@@ -29,10 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  ALLOWED_ASPECT_RATIOS,
-  ASPECT_RATIO_LABELS,
-} from "@/lib/constants";
+import { ALLOWED_ASPECT_RATIOS, ASPECT_RATIO_LABELS } from "@/lib/constants";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { toast } from "sonner";
@@ -240,6 +237,7 @@ export function LeftSidebar() {
       try {
         data = await res.json();
       } catch (err) {
+        console.warn("[generate-content] Failed to parse response JSON:", err);
         data = { error: `Server error: ${res.statusText || res.status}` };
       }
 
@@ -363,6 +361,10 @@ export function LeftSidebar() {
         try {
           data = await res.json();
         } catch (err) {
+          console.warn(
+            "[generate-content] Failed to parse response JSON:",
+            err,
+          );
           data = { error: `Server error: ${res.statusText || res.status}` };
         }
 
@@ -426,6 +428,7 @@ export function LeftSidebar() {
       try {
         data = await res.json();
       } catch (err) {
+        console.warn("[generate-content] Failed to parse response JSON:", err);
         data = {};
       }
 
@@ -502,6 +505,7 @@ export function LeftSidebar() {
       try {
         data = await res.json();
       } catch (err) {
+        console.warn("[generate-content] Failed to parse response JSON:", err);
         data = { error: `Server error: ${res.statusText || res.status}` };
       }
 

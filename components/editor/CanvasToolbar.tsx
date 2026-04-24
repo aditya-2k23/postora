@@ -87,14 +87,23 @@ export function CanvasToolbar({
             }
             aria-label={tool.label}
             className={cn(
-              "h-8 px-2.5 rounded-md text-xs flex items-center gap-1.5 transition-colors shrink-0",
+              "h-8 px-2.5 rounded-md text-xs flex items-center justify-start transition-all duration-200 shrink-0 overflow-hidden",
               activeTool === tool.id
-                ? "bg-primary/15 text-primary"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+                ? "bg-primary/15 text-primary w-[88px]"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60 w-9",
             )}
           >
-            <tool.icon className="w-3.5 h-3.5" />
-            {activeTool === tool.id && <span>{tool.label}</span>}
+            <tool.icon className="w-3.5 h-3.5 shrink-0" />
+            <span
+              className={cn(
+                "ml-2 transition-all duration-200 whitespace-nowrap",
+                activeTool === tool.id
+                  ? "opacity-100 translate-x-0"
+                  : "opacity-0 -translate-x-2 pointer-events-none w-0 ml-0",
+              )}
+            >
+              {tool.label}
+            </span>
           </button>
         ))}
       </div>

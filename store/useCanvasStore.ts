@@ -61,7 +61,7 @@ const defaultSlideFromCard = (
   theme: ThemeSettings,
 ): CanvasSlide => {
   const size = getCanvasSize(aspectRatio);
-  const padding = theme.padding || 80;
+  const padding = theme.padding ?? 80;
   const isCompact = theme.layoutEngine === "compact";
 
   // Calculate vertical distribution based on layout engine
@@ -193,7 +193,11 @@ type CanvasState = {
     theme: ThemeSettings,
   ) => void;
   syncCardContent: (card: SocialCard) => void;
-  syncCardImage: (cardId: string, imageUrl: string, targetElementId?: string) => void;
+  syncCardImage: (
+    cardId: string,
+    imageUrl: string,
+    targetElementId?: string,
+  ) => void;
   setCurrentSlideId: (cardId: string | null) => void;
   setSelectedElementIds: (ids: string[]) => void;
   toggleSelectedElementId: (id: string, additive?: boolean) => void;
@@ -333,7 +337,10 @@ export const useCanvasStore = create<CanvasState>()(
 
           // Sync Body
           if (bodyElement) {
-            if (bodyElement.type === "text" && bodyElement.text !== card.content) {
+            if (
+              bodyElement.type === "text" &&
+              bodyElement.text !== card.content
+            ) {
               changed = true;
               nextElements = nextElements.map((el) =>
                 el.id === bodyElement.id ? { ...el, text: card.content } : el,

@@ -24,13 +24,15 @@ function extractPublicId(url: string): string | null {
     const uploadIndex = parts.indexOf("upload");
     if (uploadIndex === -1 || !parts[uploadIndex + 1]) return null;
 
-    // Refactor to tolerate optional transformation segments and a strict version segment.
-    // Transformation segments usually have keys like w_ or contain commas.
-    // Version segments match a strict ^v\d+$ pattern.
     const afterUpload = parts.slice(uploadIndex + 1).join("/");
+    // First, strip any query parameters or fragments
+    const cleanPath = afterUpload.split(/[?#]/)[0];
+
+    // Relaxed regex for transformation segments and versioning
+    // Handles tokens like dpr_auto, rad_20, and comma-separated lists
     const regex =
-      /^(?:(?:[a-z]{1,2}_[^\/]+\/|[^\/]+,[^\/]+\/)*?)(?:v\d+\/)?([^\?#]+)$/i;
-    const match = afterUpload.match(regex);
+      /^(?:(?:[a-zA-Z0-9_,]+_[^\/]+\/|[^\/]+,[^\/]+\/)*?)(?:v\d+\/)?(.+)$/i;
+    const match = cleanPath.match(regex);
 
     if (!match) return null;
 
@@ -64,7 +66,7 @@ export async function POST(req: Request) {
     const db = getFirebaseAdminDb();
     const projectRef = db.doc(`users/${uid}/projects/${projectId}`);
 
-    // 1. Get project data to find any image URLs if not provided
+    // Get project data to find any image URLs if not provided
     const projectSnap = await projectRef.get();
     if (!projectSnap.exists) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
@@ -82,7 +84,7 @@ export async function POST(req: Request) {
       });
     }
 
-    // Also check canvas state for custom uploaded or generated images
+    // 2. Also check canvas state for custom uploaded or generated images
     if (projectData?.canvas?.slidesByCardId) {
       Object.values(projectData.canvas.slidesByCardId).forEach((slide: any) => {
         slide.elements?.forEach((el: any) => {
@@ -97,12 +99,12 @@ export async function POST(req: Request) {
       });
     }
 
-    // 2. Merge client-provided imageUrls if they are an array (normalize inputs)
+    // 3. Merge client-provided imageUrls if they are an array (normalize inputs)
     if (Array.isArray(imageUrls)) {
       allImageUrls.push(...imageUrls);
     }
 
-    // 2. Extract and validate unique public IDs
+    // 4. Extract and validate unique public IDs
     // We strictly enforce that the public ID starts with the user's scoped folder.
     const allowedPrefixes = [
       `postora_images/${uid}/`,
@@ -123,7 +125,7 @@ export async function POST(req: Request) {
       `[delete-project] Deleting ${publicIds.length} images from Cloudinary for project ${projectId}`,
     );
 
-    // 3. Delete from Cloudinary
+    // 5. Delete from Cloudinary
     const BATCH = 100;
     for (let i = 0; i < publicIds.length; i += BATCH) {
       const chunk = publicIds.slice(i, i + BATCH);
@@ -144,10 +146,10 @@ export async function POST(req: Request) {
       }
     }
 
-    // 4. Delete Firestore project document
+    // 6. Delete Firestore project document
     await projectRef.delete();
 
-    // 5. Delete associated subcollections if any (we don't have any right now according to blueprint)
+    // 7. Delete associated subcollections if any (we don't have any right now according to blueprint)
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

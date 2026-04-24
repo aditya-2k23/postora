@@ -99,7 +99,6 @@ type ImagePayload = {
   cardId: string;
 };
 
-
 function validateImagePayload(payload: unknown): ImagePayload {
   if (!payload || typeof payload !== "object") {
     throw new ValidationError("Invalid request payload.");
@@ -118,7 +117,10 @@ function validateImagePayload(payload: unknown): ImagePayload {
     );
   }
 
-  const aspectRatio = typeof raw.aspectRatio === "string" ? raw.aspectRatio : "4:5";
+  const aspectRatio =
+    typeof raw.aspectRatio === "string" && raw.aspectRatio.trim()
+      ? raw.aspectRatio.trim()
+      : "4:5";
   if (!ALLOWED_ASPECT_RATIOS.includes(aspectRatio as any)) {
     throw new ValidationError(
       `Invalid aspect ratio. Allowed values: ${ALLOWED_ASPECT_RATIOS.join(", ")}`,
@@ -130,7 +132,8 @@ function validateImagePayload(payload: unknown): ImagePayload {
     throw new ValidationError("Style name is too long.");
   }
 
-  const projectId = typeof raw.projectId === "string" ? raw.projectId.trim() : "";
+  const projectId =
+    typeof raw.projectId === "string" ? raw.projectId.trim() : "";
   const cardId = typeof raw.cardId === "string" ? raw.cardId.trim() : "";
 
   if (projectId.length > 64) throw new ValidationError("Invalid Project ID.");
@@ -276,8 +279,6 @@ export async function POST(req: Request) {
       }
     }
 
-
-
     const promptHash = createHash("sha256")
       .update(`${prompt}|${aspectRatio}|${style}`)
       .digest("hex");
@@ -420,8 +421,8 @@ export async function POST(req: Request) {
           status: "completed",
           secureUrl,
           quotaRemaining,
-          projectId,
-          cardId,
+          ...(projectId ? { projectId } : {}),
+          ...(cardId ? { cardId } : {}),
           updatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true },
@@ -495,9 +496,12 @@ export async function POST(req: Request) {
 
     const rawError = error?.message || "Unknown image generation failure";
     console.error("[generate-image] Unhandled Error:", rawError);
-    
+
     return NextResponse.json(
-      { error: "Image generation failed. Our specialized image AI service is temporarily unavailable." },
+      {
+        error:
+          "Image generation failed. Our specialized image AI service is temporarily unavailable.",
+      },
       { status: 500 },
     );
   }
