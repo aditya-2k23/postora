@@ -183,7 +183,7 @@ export function LeftSidebar() {
     if (!projectId) {
       toast.error(
         "No active project. Please go to the Projects dashboard and create a new project first.",
-        { duration: 5000 }
+        { duration: 5000 },
       );
       router.push("/projects");
       return;
@@ -363,7 +363,8 @@ export function LeftSidebar() {
         }
 
         if (!res.ok) {
-          const errorMsg = data.error || `Error ${res.status}: ${res.statusText}`;
+          const errorMsg =
+            data.error || `Error ${res.status}: ${res.statusText}`;
           console.error(`[Image ${i + 1}] Generation failed:`, errorMsg);
           // Only toast first failure to avoid spamming 10+ toasts
           if (i === 0) {
@@ -515,7 +516,11 @@ export function LeftSidebar() {
         setQuotaRemaining(data.quotaRemaining);
       }
 
-      addAssistantMessage({ role: "assistant", text: data.reply });
+      if (typeof data.reply === "string" && data.reply.trim()) {
+        addAssistantMessage({ role: "assistant", text: data.reply });
+      } else {
+        throw new Error("Assistant returned an empty reply.");
+      }
     } catch (error: any) {
       addAssistantMessage({
         role: "assistant",
@@ -747,91 +752,94 @@ export function LeftSidebar() {
                       <Label className="text-xs text-muted-foreground font-medium">
                         Tone
                       </Label>
-                  <Select value={tone} onValueChange={(v) => v && setTone(v)}>
-                    <SelectTrigger className="h-8 text-xs bg-card">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TONES.map((t) => (
-                        <SelectItem key={t} value={t} className="text-xs">
-                          {t}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                      <Select
+                        value={tone}
+                        onValueChange={(v) => v && setTone(v)}
+                      >
+                        <SelectTrigger className="h-8 text-xs bg-card">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {TONES.map((t) => (
+                            <SelectItem key={t} value={t} className="text-xs">
+                              {t}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground font-medium">
-                    Platform
-                  </Label>
-                  <Select
-                    value={platform}
-                    onValueChange={(v) => v && setPlatform(v)}
-                  >
-                    <SelectTrigger className="h-8 text-xs bg-card">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PLATFORMS.map((p) => (
-                        <SelectItem key={p} value={p} className="text-xs">
-                          {p}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground font-medium">
+                        Platform
+                      </Label>
+                      <Select
+                        value={platform}
+                        onValueChange={(v) => v && setPlatform(v)}
+                      >
+                        <SelectTrigger className="h-8 text-xs bg-card">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PLATFORMS.map((p) => (
+                            <SelectItem key={p} value={p} className="text-xs">
+                              {p}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground font-medium">
-                    Aspect Ratio
-                  </Label>
-                  <Select
-                    value={aspectRatio}
-                    onValueChange={(v) => v && setAspectRatio(v)}
-                  >
-                    <SelectTrigger className="h-8 text-xs bg-card">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1:1" className="text-xs">
-                        1:1 Square
-                      </SelectItem>
-                      <SelectItem value="4:5" className="text-xs">
-                        4:5 Portrait
-                      </SelectItem>
-                      <SelectItem value="9:16" className="text-xs">
-                        9:16 Story
-                      </SelectItem>
-                      <SelectItem value="16:9" className="text-xs">
-                        16:9 Landscape
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground font-medium">
+                        Aspect Ratio
+                      </Label>
+                      <Select
+                        value={aspectRatio}
+                        onValueChange={(v) => v && setAspectRatio(v)}
+                      >
+                        <SelectTrigger className="h-8 text-xs bg-card">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1:1" className="text-xs">
+                            1:1 Square
+                          </SelectItem>
+                          <SelectItem value="4:5" className="text-xs">
+                            4:5 Portrait
+                          </SelectItem>
+                          <SelectItem value="9:16" className="text-xs">
+                            9:16 Story
+                          </SelectItem>
+                          <SelectItem value="16:9" className="text-xs">
+                            16:9 Landscape
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center mb-1">
-                    <Label className="text-xs text-muted-foreground font-medium">
-                      Cards
-                    </Label>
-                    <span className="text-[10px] font-medium text-foreground bg-accent/50 px-1.5 py-0.5 rounded">
-                      {numCards}
-                    </span>
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center mb-1">
+                        <Label className="text-xs text-muted-foreground font-medium">
+                          Cards
+                        </Label>
+                        <span className="text-[10px] font-medium text-foreground bg-accent/50 px-1.5 py-0.5 rounded">
+                          {numCards}
+                        </span>
+                      </div>
+                      <Slider
+                        value={[numCards]}
+                        min={1}
+                        max={12}
+                        step={1}
+                        onValueChange={(val) =>
+                          setNumCards(Array.isArray(val) ? val[0] : val)
+                        }
+                      />
+                    </div>
                   </div>
-                  <Slider
-                    value={[numCards]}
-                    min={1}
-                    max={12}
-                    step={1}
-                    onValueChange={(val) =>
-                      setNumCards(Array.isArray(val) ? val[0] : val)
-                    }
-                  />
                 </div>
               </div>
-            </div>
-            </div>
             </div>
           </div>
         </>

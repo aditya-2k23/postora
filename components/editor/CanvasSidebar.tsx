@@ -75,6 +75,28 @@ export function CanvasSidebar({
     }
   }, [selected?.id, selectedText?.fill]);
 
+  // Global click listener to commit color changes when clicking outside
+  useEffect(() => {
+    const handleGlobalMouseDown = (e: MouseEvent) => {
+      // If clicking outside the sidebar or on the canvas, commit the local color
+      const target = e.target as HTMLElement;
+      const isSidebar = target.closest(".canvas-sidebar");
+      const isColorInput = target.tagName === "INPUT" && (target as HTMLInputElement).type === "color";
+
+      if (!isSidebar && !isColorInput) {
+        if (selectedText && localFill !== selectedText.fill) {
+          applyStyleUpdate({ fill: localFill });
+        }
+        if (localCanvasBg !== backgroundColor) {
+          onBackgroundColor(localCanvasBg);
+        }
+      }
+    };
+
+    window.addEventListener("mousedown", handleGlobalMouseDown);
+    return () => window.removeEventListener("mousedown", handleGlobalMouseDown);
+  }, [localFill, selectedText, localCanvasBg, backgroundColor]);
+
   const selectedElements = slideElements.filter((el) =>
     selectedIds.includes(el.id),
   );
@@ -147,7 +169,7 @@ export function CanvasSidebar({
     : "#ffffff";
 
   return (
-    <div className="w-full h-full bg-card border-l border-border p-3 space-y-4 overflow-y-auto">
+    <div className="w-full h-full bg-card border-l border-border p-3 space-y-4 overflow-y-auto canvas-sidebar">
       <div className="space-y-1">
         <h3 className="text-sm font-semibold">Canvas Tools</h3>
         <p className="text-[11px] text-muted-foreground">
@@ -160,17 +182,26 @@ export function CanvasSidebar({
           <p className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
             Brand Colors
           </p>
-          <label className="inline-flex h-7 cursor-pointer items-center rounded-md border border-border/80 px-2 text-[10px] font-semibold tracking-wide text-foreground/90 transition-colors hover:bg-muted/70">
-            Custom Theme
+          <div className="relative">
+            <button
+              type="button"
+              className="inline-flex h-7 items-center rounded-md border border-border/80 px-2 text-[10px] font-semibold tracking-wide text-foreground/90 transition-colors hover:bg-muted/70"
+              onClick={(e) => {
+                const input = e.currentTarget.nextElementSibling as HTMLInputElement;
+                input.click();
+              }}
+            >
+              Custom Theme
+            </button>
             <input
               type="color"
               value={localCanvasBg || "#ffffff"}
               onChange={(evt) => setLocalCanvasBg(evt.target.value)}
               onBlur={() => onBackgroundColor(localCanvasBg)}
-              className="sr-only"
+              className="absolute inset-0 opacity-0 pointer-events-none"
               aria-label="Pick custom canvas background color"
             />
-          </label>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -210,17 +241,29 @@ export function CanvasSidebar({
             );
           })}
 
-          <label className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-dashed border-border/80 text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground">
-            <Plus className="h-4 w-4" />
+          <div className="relative h-10 w-10">
+            <button
+              type="button"
+              className={cn(
+                "h-full w-full rounded-full border border-dashed border-border/80 text-muted-foreground transition-all hover:bg-muted/70 hover:text-foreground hover:scale-105 flex items-center justify-center",
+                localCanvasBg !== backgroundColor && !isDefaultBackground && "ring-2 ring-primary ring-offset-2"
+              )}
+              onClick={(e) => {
+                const input = e.currentTarget.nextElementSibling as HTMLInputElement;
+                input.click();
+              }}
+            >
+              <Plus className="h-4 w-4" />
+            </button>
             <input
               type="color"
               value={localCanvasBg || "#ffffff"}
               onChange={(evt) => setLocalCanvasBg(evt.target.value)}
               onBlur={() => onBackgroundColor(localCanvasBg)}
-              className="sr-only"
+              className="absolute inset-0 opacity-0 pointer-events-none"
               aria-label="Add custom background color"
             />
-          </label>
+          </div>
         </div>
 
         <p className="text-[10px] text-muted-foreground">
@@ -351,14 +394,57 @@ export function CanvasSidebar({
               }}
               className="h-8 rounded-md border border-border bg-background text-xs px-2"
             />
-            <input
-              type="color"
-              value={localFill}
-              onChange={(evt) => setLocalFill(evt.target.value)}
-              onBlur={() => applyStyleUpdate({ fill: localFill })}
-              className="h-8 rounded-md border border-border bg-background"
-              aria-label="Text color"
-            />
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                title="Black"
+                className={cn(
+                  "h-8 w-8 rounded-full border border-border bg-[#000000] transition-all hover:scale-110 shadow-sm",
+                  localFill.toLowerCase() === "#000000" && "ring-2 ring-primary ring-offset-2"
+                )}
+                onClick={() => {
+                  setLocalFill("#000000");
+                  onUpdateElement(selected.id, { fill: "#000000" }, hasMultiSameTypeSelection ? "matching-selection" : "single");
+                }}
+              />
+              <button
+                type="button"
+                title="White"
+                className={cn(
+                  "h-8 w-8 rounded-full border border-border bg-[#ffffff] transition-all hover:scale-110 shadow-sm",
+                  localFill.toLowerCase() === "#ffffff" && "ring-2 ring-primary ring-offset-2"
+                )}
+                onClick={() => {
+                  setLocalFill("#ffffff");
+                  onUpdateElement(selected.id, { fill: "#ffffff" }, hasMultiSameTypeSelection ? "matching-selection" : "single");
+                }}
+              />
+              <div className="relative h-8 w-8">
+                <button
+                  type="button"
+                  title="Custom Color"
+                  className={cn(
+                    "h-full w-full rounded-full border border-border transition-all hover:scale-110 shadow-sm flex items-center justify-center overflow-hidden",
+                    !["#000000", "#ffffff"].includes(localFill.toLowerCase()) && "ring-2 ring-primary ring-offset-2"
+                  )}
+                  style={{ backgroundColor: localFill }}
+                  onClick={(e) => {
+                    const input = e.currentTarget.nextElementSibling as HTMLInputElement;
+                    input.click();
+                  }}
+                >
+                   <Plus className="w-3.5 h-3.5 mix-blend-difference invert" />
+                </button>
+                <input
+                  type="color"
+                  value={localFill}
+                  onChange={(evt) => setLocalFill(evt.target.value)}
+                  onBlur={() => applyStyleUpdate({ fill: localFill })}
+                  className="absolute inset-0 opacity-0 pointer-events-none"
+                  aria-label="Text color"
+                />
+              </div>
+            </div>
             <select
               value={selected.align ?? "left"}
               onChange={(evt) =>

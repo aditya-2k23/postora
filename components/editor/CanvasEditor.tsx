@@ -211,7 +211,7 @@ export function CanvasEditor() {
         return;
       }
 
-      if (isMeta && key === "v" && isMeta) {
+      if (isMeta && key === "v") {
         // Handle Ctrl+V separately to allow single-key 'v' for tool
         evt.preventDefault();
         pushHistory();

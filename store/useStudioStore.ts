@@ -105,6 +105,10 @@ const sanitizePersistedCards = (cards: SocialCard[]): SocialCard[] =>
     return card;
   });
 
+const truncateArray = <T>(arr: T[], limit: number): T[] => {
+  return arr.length > limit ? arr.slice(-limit) : arr;
+};
+
 export const useStudioStore = create<StudioState>()(
   persist(
     (set, get) => ({
@@ -237,6 +241,8 @@ export const useStudioStore = create<StudioState>()(
         numCards: state.numCards,
         cards: sanitizePersistedCards(state.cards),
         themeSettings: state.themeSettings,
+        chatHistory: truncateArray(state.chatHistory, UNDO_STACK_LIMIT),
+        assistantHistory: truncateArray(state.assistantHistory, UNDO_STACK_LIMIT),
       }),
     },
   ),

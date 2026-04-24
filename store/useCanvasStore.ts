@@ -305,12 +305,15 @@ export const useCanvasStore = create<CanvasState>()(
           const slide = state.slidesByCardId[card.id];
           if (!slide) return state;
 
-          const titleElement = slide.elements.find(
-            (el) => el.type === "text" && el.role === "title",
-          );
-          const bodyElement = slide.elements.find(
-            (el) => el.type === "text" && el.role === "body",
-          );
+          const titleElement =
+            slide.elements.find(
+              (el) => el.type === "text" && el.role === "title",
+            ) || slide.elements.find((el) => el.type === "text");
+
+          const bodyElement =
+            slide.elements.find(
+              (el) => el.type === "text" && el.role === "body",
+            ) || [...slide.elements].reverse().find((el) => el.type === "text");
 
           let nextElements = [...slide.elements];
           let changed = false;

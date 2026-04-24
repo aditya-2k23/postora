@@ -614,7 +614,23 @@ export async function POST(req: Request) {
           quotaRemaining: quota.remaining,
         });
       } catch (postError: any) {
-        if (postError instanceof QuotaExceededError || postError?.name === "QuotaExceededError") {
+        if (
+          postError instanceof QuotaExceededError ||
+          postError?.name === "QuotaExceededError"
+        ) {
+          await recordAiUsageEvent({
+            uid,
+            endpoint: "generate-content",
+            success: true,
+            inputChars: prompt.length,
+            outputChars: JSON.stringify(finalCards).length,
+            model: selectedModel,
+            metadata: {
+              numCards,
+              platform,
+              quotaExceededAfterGeneration: true,
+            },
+          });
           throw postError;
         }
 

@@ -232,16 +232,27 @@ export function StudioNavbar() {
         </Button>
 
         {/* Save */}
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Save project"
-          className="h-8 w-8 text-muted-foreground hover:text-foreground"
-          onClick={handleSaveProject}
-          disabled={isSaving}
-        >
-          <Save className={cn("w-4 h-4", isSaving && "animate-pulse")} />
-        </Button>
+        <div className="relative flex items-center">
+          {!projectId && (assistantHistory.length >= 2 || chatHistory.length >= 4) && (
+            <span className="absolute right-full mr-2 hidden md:block whitespace-nowrap text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-full animate-in fade-in slide-in-from-right-1">
+              Save to keep history
+            </span>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Save project"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground relative"
+            onClick={handleSaveProject}
+            disabled={isSaving}
+          >
+            <Save className={cn("w-4 h-4", isSaving && "animate-pulse")} />
+            {!projectId &&
+              (assistantHistory.length >= 2 || chatHistory.length >= 4) && (
+                <span className="absolute top-1 right-1 w-2 h-2 bg-amber-500 rounded-full border-2 border-card" />
+              )}
+          </Button>
+        </div>
 
         {/* Export dropdown */}
         <DropdownMenu>
