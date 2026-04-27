@@ -132,10 +132,25 @@ export function CanvasEditor() {
     ensureSlidesFromCards(cards, aspectRatio, themeSettings);
   }, [cards, aspectRatio, themeSettings, ensureSlidesFromCards]);
 
+  // Sync card content → canvas elements, but ONLY when cards change.
+  // We intentionally exclude slidesByCardId from deps to avoid a race:
+  // canvas edits update slidesByCardId first, and if this effect fires before
+  // the studio store (cards) is updated, it would overwrite the edit with stale card text.
+  // We also skip entirely while the user is actively editing text on the canvas.
   useEffect(() => {
+    // Don't overwrite element text while the user is editing inline
+    if (textEditing) return;
+
     cards.forEach((card) => {
       syncCardContent(card);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cards, syncCardContent]);
 
+  // Sync card images separately — this one legitimately needs slidesByCardId
+  // to check whether an image element already exists.
+  useEffect(() => {
+    cards.forEach((card) => {
       const cardSlide = slidesByCardId[card.id];
       if (!cardSlide) return;
 
@@ -150,7 +165,7 @@ export function CanvasEditor() {
         syncCardImage(card.id, card.imageUrl);
       }
     });
-  }, [cards, syncCardContent, syncCardImage, slidesByCardId]);
+  }, [cards, syncCardImage, slidesByCardId]);
 
   useEffect(() => {
     if (activeCardId && activeCardId !== currentSlideId) {
@@ -383,7 +398,14 @@ export function CanvasEditor() {
             startTextEditing(id, value);
           }}
           onDoubleClickText={(id) => {
-            const node = slide.elements.find(
+            // Just start editing the new element. The TextEditorOverlay
+            // handles the transition internally: its blur will commit the
+            // old element (via sessionIdRef), and its useEffect will reset
+            // draftValue to the new element's text when editingElementId changes.
+            const latestState = useCanvasStore.getState();
+            const sid = activeCardId ?? latestState.currentSlideId;
+            const latestSlide = sid ? latestState.slidesByCardId[sid] : null;
+            const node = latestSlide?.elements.find(
               (el) => el.id === id && el.type === "text",
             );
             if (node?.type === "text") {
@@ -393,7 +415,6 @@ export function CanvasEditor() {
         />
 
         <TextEditorOverlay
-          key={textEditing?.elementId ?? "none"}
           stage={stage}
           editingElementId={textEditing?.elementId ?? null}
           elements={slide.elements}
@@ -433,12 +454,14 @@ export function CanvasEditor() {
               }
             }
 
-            // Defer cleanup to next tick to ensure store updates are processed
-            setTimeout(() => {
+            // If a new editing session has already started on a different element
+            // (e.g. user double-clicked another textbox), DON'T stop editing —
+            // the overlay already transitioned to the new element.
+            const currentEditing = useCanvasStore.getState().textEditing;
+            if (!currentEditing || currentEditing.elementId === id) {
               stopTextEditing();
-              // Deselect the element after editing as requested by the user
               clearSelection();
-            }, 0);
+            }
           }}
           onCancel={stopTextEditing}
         />

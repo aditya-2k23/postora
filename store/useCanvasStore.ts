@@ -316,15 +316,12 @@ export const useCanvasStore = create<CanvasState>()(
           const titleElement =
             slide.elements.find(
               (el) => el.type === "text" && el.role === "title",
-            ) || slide.elements.find((el) => el.type === "text");
+            );
 
           const bodyElement =
             slide.elements.find(
               (el) => el.type === "text" && el.role === "body",
-            ) ||
-            [...slide.elements]
-              .reverse()
-              .find((el) => el.type === "text" && el !== titleElement);
+            );
 
           let nextElements = [...slide.elements];
           let changed = false;
