@@ -205,7 +205,11 @@ type CanvasState = {
   setActiveTool: (tool: CanvasTool) => void;
   setBackgroundColor: (color: string) => void;
   addElement: (element: SlideElement) => void;
-  updateElement: (elementId: string, updates: Partial<SlideElement>) => void;
+  updateElement: (
+    elementId: string,
+    updates: Partial<SlideElement>,
+    cardId?: string,
+  ) => void;
   deleteSelected: (cardId?: string) => void;
   duplicateSelected: (cardId?: string) => void;
   copySelected: () => void;
@@ -327,7 +331,7 @@ export const useCanvasStore = create<CanvasState>()(
 
           // Sync Title
           if (titleElement && titleElement.type === "text") {
-            const transformedTitle = card.title.toUpperCase();
+            const transformedTitle = card.title;
             if (titleElement.text !== transformedTitle) {
               changed = true;
               nextElements = nextElements.map((el) =>
@@ -483,9 +487,9 @@ export const useCanvasStore = create<CanvasState>()(
           };
         }),
 
-      updateElement: (elementId, updates) =>
+      updateElement: (elementId, updates, cardId) =>
         set((state) => {
-          const current = state.currentSlideId;
+          const current = cardId ?? state.currentSlideId;
           if (!current) return state;
           const slide = state.slidesByCardId[current];
           if (!slide) return state;

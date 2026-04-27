@@ -299,6 +299,11 @@ export function CanvasStage({
 
     const stage = evt.target.getStage();
     if (!stage) return;
+
+    // If we are currently editing text, let the TextEditorOverlay handle the commit via blur.
+    // We don't want to clear selection or start a new selection rect here yet.
+    if (editingElementId) return;
+
     const point = toCanvasPoint(stage);
     if (!point) return;
 

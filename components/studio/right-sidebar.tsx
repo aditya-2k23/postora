@@ -14,8 +14,16 @@ export function RightSidebar() {
   const { user, loading } = useAuth();
   const router = useRouter();
 
-  const { cards, activeCardId, aspectRatio, updateCard, themeSettings } =
-    useStudioStore();
+  const {
+    cards,
+    activeCardId,
+    aspectRatio,
+    updateCard,
+    themeSettings,
+    projectId,
+    setQuotaRemaining,
+  } = useStudioStore();
+
   const {
     slidesByCardId,
     currentSlideId,
@@ -31,6 +39,7 @@ export function RightSidebar() {
     setElementLock,
     duplicateSelected,
     addElement,
+    syncCardImage,
   } = useCanvasStore();
 
   const slideId = currentSlideId ?? activeCardId;
@@ -110,10 +119,17 @@ export function RightSidebar() {
           updateElement(id, updates);
 
           // Sync back to card store if it's a role-based text element
-          if (updates.text !== undefined && slideId) {
+          if (slideId) {
             const el = slide.elements.find((e) => e.id === id);
-            if (el?.role === "title") updateCard(slideId, { title: updates.text });
-            if (el?.role === "body") updateCard(slideId, { content: updates.text });
+            if (el?.type === "text" && el.role) {
+              const textValue = (updates as any).text;
+              if (textValue !== undefined) {
+                if (el.role === "title")
+                  updateCard(slideId, { title: textValue });
+                if (el.role === "body")
+                  updateCard(slideId, { content: textValue });
+              }
+            }
           }
         }}
         onAlign={(dir) => {
@@ -163,7 +179,7 @@ export function RightSidebar() {
                 prompt: currentCard.imagePrompt,
                 aspectRatio,
                 style: themeSettings.style,
-                projectId: useStudioStore.getState().projectId,
+                projectId,
                 cardId: currentCard.id,
               }),
             });
@@ -184,17 +200,11 @@ export function RightSidebar() {
             }
 
             if (data.quotaRemaining !== undefined) {
-              useStudioStore.getState().setQuotaRemaining(data.quotaRemaining);
+              setQuotaRemaining(data.quotaRemaining);
             }
 
             updateCard(currentCard.id, { imageUrl: data.imageUrl });
-            useCanvasStore
-              .getState()
-              .syncCardImage(
-                currentCard.id,
-                data.imageUrl,
-                selectedImage?.id,
-              );
+            syncCardImage(currentCard.id, data.imageUrl, selectedImage?.id);
             toast.dismiss(loadingToast);
             toast.success("Image regenerated");
           } catch (error: unknown) {

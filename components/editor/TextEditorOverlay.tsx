@@ -8,7 +8,7 @@ type Props = {
   stage: Konva.Stage | null;
   editingElementId: string | null;
   elements: SlideElement[];
-  onCommit: (nextValue: string) => void;
+  onCommit: (id: string, nextValue: string) => void;
   onCancel: () => void;
 };
 
@@ -87,9 +87,9 @@ export function TextEditorOverlay({
   }, [editingElementId]);
 
   const finalizeCommit = () => {
-    if (didFinalizeRef.current) return;
+    if (didFinalizeRef.current || !target) return;
     didFinalizeRef.current = true;
-    onCommit(draftValue);
+    onCommit(target.id, draftValue);
   };
 
   const finalizeCancel = () => {

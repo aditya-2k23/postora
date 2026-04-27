@@ -570,22 +570,36 @@ export function LeftSidebar() {
           >
             <Sparkles className="w-3.5 h-3.5" />
           </div>
-          <span className="font-semibold text-sm text-foreground">
-            AI Assistant
-          </span>
+          <div className="flex flex-col">
+            <span className="font-semibold text-sm text-foreground leading-tight">
+              AI Assistant
+            </span>
+            <span className="text-[9px] text-muted-foreground opacity-80">
+              Use quick {activeTab === "generate" ? "templates" : "suggestions"} →
+            </span>
+          </div>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger
             className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-            title="Quick Templates"
+            title={
+              activeTab === "generate" ? "Quick Templates" : "Quick Suggestions"
+            }
           >
             <LayoutTemplate className="w-4 h-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuGroup>
-              <DropdownMenuLabel>Quick Templates</DropdownMenuLabel>
+              <DropdownMenuLabel>
+                {activeTab === "generate"
+                  ? "Quick Templates"
+                  : "Quick Suggestions"}
+              </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {QUICK_TEMPLATES.map((t) => (
+              {(activeTab === "generate"
+                ? QUICK_TEMPLATES
+                : ASSISTANT_PROMPTS
+              ).map((t) => (
                 <DropdownMenuItem
                   key={t.label}
                   onClick={() => setInputValue(t.prompt)}
@@ -691,7 +705,7 @@ export function LeftSidebar() {
 
           {/* Generation Input */}
           <div className="p-4 pb-6 border-t border-border space-y-4">
-            <div className="flex items-end gap-2">
+            <div className="flex items-center gap-2">
               <div className="flex-1 relative">
                 <TextareaAutosize
                   placeholder="Describe your post idea..."
@@ -707,7 +721,7 @@ export function LeftSidebar() {
                 onClick={handleSendClick}
                 disabled={isGenerating || !inputValue.trim()}
                 size="icon"
-                className="h-[36px] w-[36px] shrink-0 shadow-sm hover:opacity-90 rounded-lg mb-1"
+                className="h-[36px] w-[36px] shrink-0 shadow-sm hover:opacity-90 rounded-lg"
                 style={{
                   backgroundColor: accent,
                   color: getAccessibleTextColor(accent),
@@ -921,7 +935,7 @@ export function LeftSidebar() {
 
           {/* Assistant Input */}
           <div className="p-4 pb-6 border-t border-border space-y-4">
-            <div className="flex items-end gap-2">
+            <div className="flex items-center gap-2">
               <div className="flex-1 relative">
                 <TextareaAutosize
                   placeholder={
@@ -944,7 +958,7 @@ export function LeftSidebar() {
                   isAssistantThinking || !inputValue.trim() || !hasCards
                 }
                 size="icon"
-                className="h-[36px] w-[36px] shrink-0 shadow-sm hover:opacity-90 rounded-lg mb-1"
+                className="h-[36px] w-[36px] shrink-0 shadow-sm hover:opacity-90 rounded-lg"
                 style={{
                   backgroundColor: accent,
                   color: getAccessibleTextColor(accent),
@@ -965,26 +979,6 @@ export function LeftSidebar() {
                 >
                   {quotaRemaining} left
                 </span>
-              </div>
-            )}
-
-            {/* Quick Assistant Prompts */}
-            {hasCards && (
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                  Quick Suggestions
-                </p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {ASSISTANT_PROMPTS.map((t) => (
-                    <button
-                      key={t.label}
-                      onClick={() => setInputValue(t.prompt)}
-                      className="text-[11px] px-2.5 py-1.5 rounded-md bg-muted/60 border border-border text-foreground/80 hover:bg-muted hover:text-foreground transition-colors text-left truncate"
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
               </div>
             )}
           </div>

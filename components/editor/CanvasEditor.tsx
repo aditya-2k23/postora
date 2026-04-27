@@ -397,33 +397,48 @@ export function CanvasEditor() {
           stage={stage}
           editingElementId={textEditing?.elementId ?? null}
           elements={slide.elements}
-          onCommit={(value) => {
-            if (!textEditing?.elementId) return;
-            const currentText = slide.elements.find(
-              (el): el is Extract<SlideElement, { type: "text" }> =>
-                el.type === "text" && el.id === textEditing.elementId,
-            );
-            if (!currentText) {
-              stopTextEditing();
-              return;
-            }
-            if (currentText.text === value) {
-              stopTextEditing();
-              return;
-            }
-            pushHistory();
-            updateElement(textEditing.elementId, { text: value });
+          onCommit={(id, value) => {
+            // Get the latest state from the store to avoid closure staleness
+            const state = useCanvasStore.getState();
+            const slideId = activeCardId ?? state.currentSlideId;
+            const currentSlide = slideId ? state.slidesByCardId[slideId] : null;
 
-            // Sync back to card
-            if (activeCardId) {
-              if (currentText.role === "title") {
-                updateCard(activeCardId, { title: value });
-              } else if (currentText.role === "body") {
-                updateCard(activeCardId, { content: value });
+            if (!currentSlide) {
+              stopTextEditing();
+              return;
+            }
+
+            const currentElement = currentSlide.elements.find(
+              (el): el is Extract<SlideElement, { type: "text" }> =>
+                el.type === "text" && el.id === id,
+            );
+
+            if (!currentElement) {
+              stopTextEditing();
+              return;
+            }
+
+            // Only update if value actually changed
+            if (currentElement.text !== value) {
+              pushHistory();
+              updateElement(id, { text: value }, slideId ?? undefined);
+
+              // Sync back to card
+              if (activeCardId) {
+                if (currentElement.role === "title") {
+                  updateCard(activeCardId, { title: value });
+                } else if (currentElement.role === "body") {
+                  updateCard(activeCardId, { content: value });
+                }
               }
             }
 
-            stopTextEditing();
+            // Defer cleanup to next tick to ensure store updates are processed
+            setTimeout(() => {
+              stopTextEditing();
+              // Deselect the element after editing as requested by the user
+              clearSelection();
+            }, 0);
           }}
           onCancel={stopTextEditing}
         />
