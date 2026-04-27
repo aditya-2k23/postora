@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore, useRef } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, useCallback } from "react";
 
 import { useStudioStore } from "@/store/useStudioStore";
 import { useShallow } from "zustand/shallow";
@@ -21,6 +21,9 @@ import {
   LogOut,
   User as UserIcon,
   LayoutDashboard,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { db, signOut } from "@/lib/firebase";
@@ -45,7 +48,9 @@ export function StudioNavbar() {
     numCards,
     themeSettings,
     projectId,
+    projectName,
     setProjectId,
+    setProjectName,
     chatHistory,
     assistantHistory,
     studioVersion,
@@ -59,7 +64,9 @@ export function StudioNavbar() {
       numCards: s.numCards,
       themeSettings: s.themeSettings,
       projectId: s.projectId,
+      projectName: s.projectName,
       setProjectId: s.setProjectId,
+      setProjectName: s.setProjectName,
       chatHistory: s.chatHistory,
       assistantHistory: s.assistantHistory,
       studioVersion: s.studioVersion,
@@ -80,18 +87,55 @@ export function StudioNavbar() {
     studioVersion,
   });
 
+  // ── Inline rename state ──
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  const startRename = useCallback(() => {
+    setRenameValue(projectName || "");
+    setIsRenaming(true);
+  }, [projectName]);
+
+  useEffect(() => {
+    if (isRenaming) {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    }
+  }, [isRenaming]);
+
+  const commitRename = useCallback(() => {
+    const trimmed = renameValue.trim();
+    setProjectName(trimmed || null);
+    setIsRenaming(false);
+    if (trimmed) {
+      toast.success("Project renamed!");
+    }
+  }, [renameValue, setProjectName]);
+
+  const cancelRename = useCallback(() => {
+    setIsRenaming(false);
+  }, []);
+
+  const handleRenameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commitRename();
+    } else if (e.key === "Escape") {
+      cancelRename();
+    }
+  };
+
+  // ── Dirty-state tracking ──
   const lastSnapshotProjectRef = useRef<string | null>(null);
 
-  // Reset dirty state when a new project is loaded, waiting for async hydration
   useEffect(() => {
     if (projectId) {
       if (
         lastSnapshotProjectRef.current !== projectId &&
         (assistantHistory.length > 0 || chatHistory.length > 0)
       ) {
-        setLastSavedState({
-          studioVersion,
-        });
+        setLastSavedState({ studioVersion });
         lastSnapshotProjectRef.current = projectId;
       }
     } else {
@@ -100,7 +144,10 @@ export function StudioNavbar() {
   }, [projectId, assistantHistory.length, chatHistory.length, studioVersion]);
 
   const isDirty = !projectId || studioVersion !== lastSavedState.studioVersion;
-  const showUnsavedIndicator = isDirty && !isSaving && (assistantHistory.length >= 2 || chatHistory.length >= 4);
+  const showUnsavedIndicator =
+    isDirty &&
+    !isSaving &&
+    (assistantHistory.length >= 2 || chatHistory.length >= 4);
 
   const handleSaveProject = async () => {
     if (isSaving) return;
@@ -138,6 +185,7 @@ export function StudioNavbar() {
       const mainPayload = {
         id: pId,
         userId: user.uid,
+        ...(projectName ? { projectName } : {}),
         prompt,
         tone,
         platform,
@@ -158,10 +206,7 @@ export function StudioNavbar() {
         setProjectId(pId);
       }
 
-      setLastSavedState({
-        studioVersion,
-      });
-
+      setLastSavedState({ studioVersion });
       toast.success("Project saved securely to cloud!");
     } catch (e: any) {
       toast.error("Failed to save: " + e.message);
@@ -195,7 +240,6 @@ export function StudioNavbar() {
       error: (e: any) => {
         const msg = e?.message?.toLowerCase() || "";
         if (msg.includes("permission")) {
-          // If a background firebase timeout threw a permission error during lag
           return "PDF Generated. Ignore background sync error.";
         }
         return `Failed to export: ${e.message || "Unknown error"}`;
@@ -205,12 +249,18 @@ export function StudioNavbar() {
 
   const accentColor = themeSettings.primaryColor;
 
+  // Derive the display title — fallback hierarchy: name → truncated prompt → "Untitled Project"
+  const displayTitle =
+    projectName ||
+    (prompt ? prompt.slice(0, 32) + (prompt.length > 32 ? "…" : "") : null) ||
+    "Untitled Project";
+
   return (
     <div className="h-14 border-b border-border bg-card flex items-center justify-between px-4 shrink-0 z-30">
-      {/* Left — Branding */}
-      <div className="flex items-center gap-2.5">
+      {/* Left — Branding + Project title */}
+      <div className="flex items-center gap-2.5 min-w-0">
         <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm shadow-md"
+          className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center font-bold text-sm shadow-md"
           style={{
             backgroundColor: accentColor,
             color: getAccessibleTextColor(accentColor),
@@ -218,18 +268,57 @@ export function StudioNavbar() {
         >
           AI
         </div>
-        <span className="font-semibold text-sm tracking-tight text-foreground">
-          Postora Studio Editor
-        </span>
 
-        <div className="w-px h-4 bg-border mx-1.5" />
+        {/* Project title — inline editable */}
+        <div className="flex items-center gap-1.5 min-w-0">
+          {isRenaming ? (
+            <div className="flex items-center gap-1">
+              <input
+                ref={renameInputRef}
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onKeyDown={handleRenameKeyDown}
+                onBlur={commitRename}
+                maxLength={60}
+                placeholder="Project name…"
+                className="h-7 w-48 max-w-[200px] px-2 py-0.5 text-sm font-semibold bg-background border border-primary/50 rounded-md outline-none ring-2 ring-primary/20 text-foreground placeholder:text-muted-foreground/50"
+              />
+              <button
+                onMouseDown={(e) => { e.preventDefault(); commitRename(); }}
+                className="h-6 w-6 flex items-center justify-center rounded text-emerald-500 hover:bg-emerald-500/10 transition-colors"
+                title="Confirm rename"
+              >
+                <Check className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onMouseDown={(e) => { e.preventDefault(); cancelRename(); }}
+                className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:bg-muted transition-colors"
+                title="Cancel rename"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={startRename}
+              title="Click to rename project"
+              className="group flex items-center gap-1.5 min-w-0 max-w-[200px] px-2 py-1 rounded-md hover:bg-muted/60 transition-colors"
+            >
+              <span className="font-semibold text-sm tracking-tight text-foreground truncate">
+                {displayTitle}
+              </span>
+              <Pencil className="w-3 h-3 flex-shrink-0 text-muted-foreground opacity-0 group-hover:opacity-70 transition-opacity" />
+            </button>
+          )}
+        </div>
+
+        <div className="w-px h-4 bg-border mx-0.5 flex-shrink-0" />
 
         <Button
           variant="ghost"
           size="sm"
-          className="h-8 gap-2 px-3 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-full transition-all duration-200"
+          className="h-8 gap-2 px-3 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-full transition-all duration-200 flex-shrink-0"
           onClick={async () => {
-            // Background save before leaving if possible
             if (user && (cards.length > 0 || prompt)) {
               handleSaveProject().catch(() => {});
             }
@@ -243,7 +332,7 @@ export function StudioNavbar() {
 
       {/* Right — Actions */}
       <div className="flex items-center gap-2">
-        {/* Theme toggle — only render icon after mount to avoid hydration mismatch */}
+        {/* Theme toggle */}
         <Button
           variant="ghost"
           size="icon"
@@ -267,10 +356,10 @@ export function StudioNavbar() {
         {/* Save */}
         <div className="relative flex items-center">
           {showUnsavedIndicator && (
-              <span className="absolute top-[calc(100%+4px)] right-[-30px] whitespace-nowrap text-[9px] font-medium text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded shadow-sm animate-in fade-in slide-in-from-top-1">
-                {projectId ? "Unsaved changes" : "Save to keep history"}
-              </span>
-            )}
+            <span className="absolute top-[calc(100%+4px)] right-[-30px] whitespace-nowrap text-[9px] font-medium text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded shadow-sm animate-in fade-in slide-in-from-top-1">
+              {projectId ? "Unsaved changes" : "Save to keep history"}
+            </span>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -281,8 +370,8 @@ export function StudioNavbar() {
           >
             <Save className={cn("w-4 h-4", isSaving && "animate-pulse")} />
             {showUnsavedIndicator && (
-                <span className="absolute top-1 right-1 w-2 h-2 bg-amber-500 rounded-full border-2 border-card" />
-              )}
+              <span className="absolute top-1 right-1 w-2 h-2 bg-amber-500 rounded-full border-2 border-card" />
+            )}
           </Button>
         </div>
 
@@ -300,17 +389,11 @@ export function StudioNavbar() {
             <ChevronDown className="w-3 h-3" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuItem
-              onClick={handleExportPNG}
-              className="cursor-pointer"
-            >
+            <DropdownMenuItem onClick={handleExportPNG} className="cursor-pointer">
               <Download className="w-3.5 h-3.5 mr-2" />
               Export as PNG
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={handleExportPDF}
-              className="cursor-pointer"
-            >
+            <DropdownMenuItem onClick={handleExportPDF} className="cursor-pointer">
               <Download className="w-3.5 h-3.5 mr-2" />
               Export as PDF
             </DropdownMenuItem>

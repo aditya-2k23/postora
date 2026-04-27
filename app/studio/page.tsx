@@ -65,6 +65,7 @@ export default function StudioPage() {
   const { user } = useAuth();
   const primaryColor = useStudioStore((s) => s.themeSettings.primaryColor);
   const projectId = useStudioStore((s) => s.projectId);
+  const projectName = useStudioStore((s) => s.projectName);
   const prompt = useStudioStore((s) => s.prompt);
   const platform = useStudioStore((s) => s.platform);
   const tone = useStudioStore((s) => s.tone);
@@ -204,6 +205,14 @@ export default function StudioPage() {
   const lastCanvasSyncedRef = useRef<string>("");
   const hasLoadedProjectRef = useRef<string | null>(null);
 
+  // Capture canvasCurrentSlideId in a ref so the load effect can read the
+  // latest value without making it a reactive dependency (which caused the
+  // effect to re-run every time the active slide changed).
+  const canvasCurrentSlideIdRef = useRef(canvasCurrentSlideId);
+  useEffect(() => {
+    canvasCurrentSlideIdRef.current = canvasCurrentSlideId;
+  }, [canvasCurrentSlideId]);
+
   // Initial project & canvas load for existing projects
   useEffect(() => {
     if (
@@ -230,6 +239,7 @@ export default function StudioPage() {
 
         // 1. Populate Studio Store
         const studio = useStudioStore.getState();
+        if (data.projectName !== undefined) studio.setProjectName(data.projectName);
         if (data.prompt !== undefined) studio.setPrompt(data.prompt);
         if (data.tone !== undefined) studio.setTone(data.tone);
         if (data.platform !== undefined) studio.setPlatform(data.platform);
@@ -244,6 +254,7 @@ export default function StudioPage() {
 
         // Track last synced to avoid immediate re-save
         lastCardsSyncedRef.current = JSON.stringify({
+          projectName: data.projectName || null,
           prompt: data.prompt || "",
           platform: data.platform || "",
           tone: data.tone || "",
@@ -260,7 +271,7 @@ export default function StudioPage() {
         if (canvas && typeof canvas === "object") {
           useCanvasStore.setState({
             slidesByCardId: canvas.slidesByCardId || {},
-            currentSlideId: canvas.currentSlideId || canvasCurrentSlideId,
+            currentSlideId: canvas.currentSlideId || canvasCurrentSlideIdRef.current,
             activeTool: canvas.activeTool || "select",
             gridEnabled: !!canvas.gridEnabled,
             rulerEnabled: !!canvas.rulerEnabled,
@@ -281,13 +292,14 @@ export default function StudioPage() {
     };
 
     loadProjectData();
-  }, [mounted, user, projectId, canvasCurrentSlideId]);
+  }, [mounted, user, projectId]);
 
   // Sync 1: Metadata and Cards
   useEffect(() => {
     if (!mounted || !user || !projectId) return;
 
     const currentCardsJson = JSON.stringify({
+      projectName,
       prompt,
       platform,
       tone,
@@ -307,6 +319,7 @@ export default function StudioPage() {
         const payload = {
           id: projectId,
           userId: user.uid,
+          ...(projectName ? { projectName } : {}),
           prompt,
           platform,
           tone,
@@ -340,6 +353,7 @@ export default function StudioPage() {
 
     return () => window.clearTimeout(timer);
   }, [
+    projectName,
     prompt,
     platform,
     tone,

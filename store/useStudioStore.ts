@@ -40,6 +40,7 @@ interface StudioState {
   themeSettings: ThemeSettings;
   isGenerating: boolean;
   projectId: string | null;
+  projectName: string | null;
   quotaRemaining: number | null;
 
   // Generation chat history (prompt → carousel)
@@ -68,6 +69,7 @@ interface StudioState {
   updateTheme: (updates: Partial<ThemeSettings>) => void;
   setIsGenerating: (isGenerating: boolean) => void;
   setProjectId: (id: string | null) => void;
+  setProjectName: (name: string | null) => void;
   setQuotaRemaining: (val: number | null) => void;
   addChatMessage: (message: ChatMessage) => void;
   setChatHistory: (history: ChatMessage[]) => void;
@@ -125,6 +127,7 @@ export const useStudioStore = create<StudioState>()(
       themeSettings: defaultTheme,
       isGenerating: false,
       projectId: null,
+      projectName: null,
       quotaRemaining: null,
       chatHistory: [],
       assistantHistory: [],
@@ -166,6 +169,7 @@ export const useStudioStore = create<StudioState>()(
         })),
       setIsGenerating: (isGenerating) => set({ isGenerating }),
       setProjectId: (projectId) => set({ projectId }),
+      setProjectName: (projectName) => set({ projectName }),
       setQuotaRemaining: (quotaRemaining) => set({ quotaRemaining }),
 
       addChatMessage: (message) =>
@@ -229,6 +233,7 @@ export const useStudioStore = create<StudioState>()(
           cards: [],
           activeCardId: null,
           projectId: null,
+          projectName: null,
           quotaRemaining: null,
           chatHistory: [],
           assistantHistory: [],
@@ -242,6 +247,8 @@ export const useStudioStore = create<StudioState>()(
       name: "social-studio-storage",
       partialize: (state) => ({
         studioVersion: state.studioVersion,
+        projectId: state.projectId,
+        projectName: state.projectName,
         prompt: state.prompt,
         tone: state.tone,
         platform: state.platform,

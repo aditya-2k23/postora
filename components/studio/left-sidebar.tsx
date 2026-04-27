@@ -11,7 +11,6 @@ import {
   MessageSquare,
   Zap,
   LayoutTemplate,
-  ChevronDown,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -22,16 +21,6 @@ import {
   DropdownMenuLabel,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { ALLOWED_ASPECT_RATIOS, ASPECT_RATIO_LABELS } from "@/lib/constants";
-import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
 import { toast } from "sonner";
 import { useEffect, useRef, useState } from "react";
 import TextareaAutosize from "react-textarea-autosize";
@@ -134,10 +123,6 @@ export function LeftSidebar() {
 
   const {
     setPrompt,
-    setTone,
-    setPlatform,
-    setAspectRatio,
-    setNumCards,
     setCards,
     setActiveCardId,
     setIsGenerating,
@@ -151,7 +136,6 @@ export function LeftSidebar() {
 
   const [activeTab, setActiveTab] = useState<SidebarTab>("generate");
   const [inputValue, setInputValue] = useState("");
-  const [settingsExpanded, setSettingsExpanded] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const assistantEndRef = useRef<HTMLDivElement>(null);
 
@@ -205,7 +189,9 @@ export function LeftSidebar() {
     }
 
     addChatMessage({ role: "user", text });
-    setPrompt(text);
+    // Only overwrite the project prompt on a fresh generation (no existing cards).
+    // For append operations, the original prompt should be preserved.
+    if (cards.length === 0) setPrompt(text);
     setInputValue("");
     setIsGenerating(true);
     clearAssistantHistory();
@@ -745,121 +731,6 @@ export function LeftSidebar() {
               </div>
             )}
 
-            {/* Generation Settings */}
-            <div>
-              <button
-                onClick={() => setSettingsExpanded(!settingsExpanded)}
-                className="w-full flex items-center justify-between group outline-none"
-              >
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-foreground transition-colors mb-2">
-                  Generation Settings
-                </p>
-                <ChevronDown
-                  className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-200 mb-2 ${
-                    settingsExpanded ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
-
-              <div
-                className={`grid transition-all duration-300 ease-in-out ${
-                  settingsExpanded
-                    ? "grid-rows-[1fr] opacity-100 mb-2"
-                    : "grid-rows-[0fr] opacity-0"
-                }`}
-              >
-                <div className="overflow-hidden">
-                  <div className="grid grid-cols-2 gap-3 bg-muted/20 p-3 rounded-lg border border-border">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground font-medium">
-                        Tone
-                      </Label>
-                      <Select
-                        value={tone}
-                        onValueChange={(v) => v && setTone(v)}
-                      >
-                        <SelectTrigger className="h-8 text-xs bg-card">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {TONES.map((t) => (
-                            <SelectItem key={t} value={t} className="text-xs">
-                              {t}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground font-medium">
-                        Platform
-                      </Label>
-                      <Select
-                        value={platform}
-                        onValueChange={(v) => v && setPlatform(v)}
-                      >
-                        <SelectTrigger className="h-8 text-xs bg-card">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PLATFORMS.map((p) => (
-                            <SelectItem key={p} value={p} className="text-xs">
-                              {p}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground font-medium">
-                        Aspect Ratio
-                      </Label>
-                      <Select
-                        value={aspectRatio}
-                        onValueChange={(v) => v && setAspectRatio(v)}
-                      >
-                        <SelectTrigger className="h-8 text-xs bg-card">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {ALLOWED_ASPECT_RATIOS.map((ratio) => (
-                            <SelectItem
-                              key={ratio}
-                              value={ratio}
-                              className="text-xs"
-                            >
-                              {ASPECT_RATIO_LABELS[ratio]}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center mb-1">
-                        <Label className="text-xs text-muted-foreground font-medium">
-                          Cards
-                        </Label>
-                        <span className="text-[10px] font-medium text-foreground bg-accent/50 px-1.5 py-0.5 rounded">
-                          {numCards}
-                        </span>
-                      </div>
-                      <Slider
-                        value={[numCards]}
-                        min={1}
-                        max={12}
-                        step={1}
-                        onValueChange={(val) =>
-                          setNumCards(Array.isArray(val) ? val[0] : val)
-                        }
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         </>
       )}
