@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore, useRef } from "react";
 
 import { useStudioStore } from "@/store/useStudioStore";
 import { useShallow } from "zustand/shallow";
@@ -48,6 +48,7 @@ export function StudioNavbar() {
     setProjectId,
     chatHistory,
     assistantHistory,
+    studioVersion,
   } = useStudioStore(
     useShallow((s) => ({
       cards: s.cards,
@@ -61,6 +62,7 @@ export function StudioNavbar() {
       setProjectId: s.setProjectId,
       chatHistory: s.chatHistory,
       assistantHistory: s.assistantHistory,
+      studioVersion: s.studioVersion,
     })),
   );
   const { user } = useAuth();
@@ -73,27 +75,32 @@ export function StudioNavbar() {
   const rulerEnabled = useCanvasStore((s) => s.rulerEnabled);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSavedState, setLastSavedState] = useState<{
-    assistantHistoryLength: number;
-    chatHistoryLength: number;
+    studioVersion: number;
   }>({
-    assistantHistoryLength: assistantHistory.length,
-    chatHistoryLength: chatHistory.length,
+    studioVersion,
   });
 
-  // Reset dirty state when a new project is loaded
+  const lastSnapshotProjectRef = useRef<string | null>(null);
+
+  // Reset dirty state when a new project is loaded, waiting for async hydration
   useEffect(() => {
     if (projectId) {
-      setLastSavedState({
-        assistantHistoryLength: assistantHistory.length,
-        chatHistoryLength: chatHistory.length,
-      });
+      if (
+        lastSnapshotProjectRef.current !== projectId &&
+        (assistantHistory.length > 0 || chatHistory.length > 0)
+      ) {
+        setLastSavedState({
+          studioVersion,
+        });
+        lastSnapshotProjectRef.current = projectId;
+      }
+    } else {
+      lastSnapshotProjectRef.current = null;
     }
-  }, [projectId]);
+  }, [projectId, assistantHistory.length, chatHistory.length, studioVersion]);
 
-  const isDirty =
-    !projectId ||
-    assistantHistory.length !== lastSavedState.assistantHistoryLength ||
-    chatHistory.length !== lastSavedState.chatHistoryLength;
+  const isDirty = !projectId || studioVersion !== lastSavedState.studioVersion;
+  const showUnsavedIndicator = isDirty && !isSaving && (assistantHistory.length >= 2 || chatHistory.length >= 4);
 
   const handleSaveProject = async () => {
     if (isSaving) return;
@@ -152,8 +159,7 @@ export function StudioNavbar() {
       }
 
       setLastSavedState({
-        assistantHistoryLength: assistantHistory.length,
-        chatHistoryLength: chatHistory.length,
+        studioVersion,
       });
 
       toast.success("Project saved securely to cloud!");
@@ -260,9 +266,7 @@ export function StudioNavbar() {
 
         {/* Save */}
         <div className="relative flex items-center">
-          {isDirty &&
-            !isSaving &&
-            (assistantHistory.length >= 2 || chatHistory.length >= 4) && (
+          {showUnsavedIndicator && (
               <span className="absolute top-[calc(100%+4px)] right-[-30px] whitespace-nowrap text-[9px] font-medium text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded shadow-sm animate-in fade-in slide-in-from-top-1">
                 {projectId ? "Unsaved changes" : "Save to keep history"}
               </span>
@@ -276,9 +280,7 @@ export function StudioNavbar() {
             disabled={isSaving}
           >
             <Save className={cn("w-4 h-4", isSaving && "animate-pulse")} />
-            {isDirty &&
-              !isSaving &&
-              (assistantHistory.length >= 2 || chatHistory.length >= 4) && (
+            {showUnsavedIndicator && (
                 <span className="absolute top-1 right-1 w-2 h-2 bg-amber-500 rounded-full border-2 border-card" />
               )}
           </Button>

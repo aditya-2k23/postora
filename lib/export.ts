@@ -11,9 +11,9 @@ import { useCanvasStore } from "@/store/useCanvasStore";
 import { useStudioStore } from "@/store/useStudioStore";
 import {
   ASPECT_RATIO_DIMENSIONS,
-  type AspectRatio,
   type SlideElement,
 } from "@/types/canvas";
+import type { AspectRatio } from "@/lib/constants";
 import { isBoldWeight } from "./typography";
 
 const loadImage = (src: string) =>

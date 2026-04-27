@@ -45,7 +45,7 @@ export function getAccessibleTextColor(hexColor: string): string {
 export function normalizeColor(hexColor: string): string {
   if (!hexColor) return "#000000";
   const match = hexColor.match(/^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
-  if (!match) return hexColor;
+  if (!match) return "#000000";
   const hex = match[1];
   if (hex.length === 3) {
     return (

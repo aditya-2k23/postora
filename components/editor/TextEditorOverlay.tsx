@@ -21,10 +21,9 @@ export function TextEditorOverlay({
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Track which element ID this session's draft belongs to.
-  // This is the source of truth for preventing cross-element leaks.
   const sessionIdRef = useRef<string | null>(null);
   const committedRef = useRef(false);
+  const cancelledRef = useRef(false);
 
   const target = useMemo(
     () =>
@@ -36,25 +35,24 @@ export function TextEditorOverlay({
   );
 
   const [draftValue, setDraftValue] = useState("");
+  const draftRef = useRef(draftValue);
 
   // ── Core: whenever editingElementId changes, reset the session ──
-  // This handles both initial mount AND switching between elements.
-  useEffect(() => {
+  // This handles both initial mount AND switching between elements using derived state
+  // to avoid a double-render cascade.
+  if (editingElementId !== sessionIdRef.current) {
+    sessionIdRef.current = editingElementId;
+    committedRef.current = false;
+    cancelledRef.current = false;
+    
     if (editingElementId && target) {
-      // New editing session: reset draft to the target's text
-      sessionIdRef.current = editingElementId;
-      committedRef.current = false;
       setDraftValue(target.text);
       draftRef.current = target.text;
     } else {
-      sessionIdRef.current = null;
+      setDraftValue("");
+      draftRef.current = "";
     }
-  }, [editingElementId]);
-
-  // Keep a ref of the latest draft so the blur handler always reads the
-  // most-recent typed value, even if React hasn't re-rendered yet.
-  const draftRef = useRef(draftValue);
-  draftRef.current = draftValue;
+  }
 
   const style = useMemo(() => {
     if (!stage || !target) return null;
@@ -143,7 +141,7 @@ export function TextEditorOverlay({
 
   const handleCommit = useCallback(() => {
     // Guard: only commit once per session, and only for the correct element
-    if (committedRef.current) return;
+    if (committedRef.current || cancelledRef.current) return;
     const id = sessionIdRef.current;
     if (!id) return;
     committedRef.current = true;
@@ -151,7 +149,7 @@ export function TextEditorOverlay({
   }, [onCommit]);
 
   const handleCancel = useCallback(() => {
-    committedRef.current = true;
+    cancelledRef.current = true;
     onCancel();
   }, [onCancel]);
 

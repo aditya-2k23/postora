@@ -3,9 +3,12 @@
 import type Konva from "konva";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { SocialCard, ThemeSettings } from "@/store/useStudioStore";
+import {
+  useStudioStore,
+  type SocialCard,
+  type ThemeSettings,
+} from "@/store/useStudioStore";
 import type {
-  AspectRatio,
   CanvasHistorySnapshot,
   CanvasSlide,
   CanvasTool,
@@ -13,6 +16,7 @@ import type {
   SlideElement,
 } from "@/types/canvas";
 import { ASPECT_RATIO_DIMENSIONS } from "@/types/canvas";
+import { AspectRatio } from "@/lib/constants";
 
 const HISTORY_LIMIT = 100;
 const MAX_PERSISTED_DATA_URL_LENGTH = 12_000;
@@ -127,6 +131,7 @@ const defaultSlideFromCard = (
     cardId: card.id,
     backgroundColor: "#ffffff",
     elements,
+    ...(card.imageUrl ? { metadata: { autoSynced: true } } : {}),
   };
 };
 
@@ -316,12 +321,15 @@ export const useCanvasStore = create<CanvasState>()(
           const titleElement =
             slide.elements.find(
               (el) => el.type === "text" && el.role === "title",
-            );
+            ) || slide.elements.find((el) => el.type === "text");
 
           const bodyElement =
             slide.elements.find(
               (el) => el.type === "text" && el.role === "body",
-            );
+            ) ||
+            [...slide.elements]
+              .reverse()
+              .find((el) => el.type === "text" && el !== titleElement);
 
           let nextElements = [...slide.elements];
           let changed = false;
@@ -391,7 +399,8 @@ export const useCanvasStore = create<CanvasState>()(
 
           // If no image element, but we have an imageUrl, ADD IT.
           // This happens when image generation finishes AFTER the slide shell is created.
-          const currentAspectRatio = "4:5"; // Ideally tracked in store, but defaulting to portrait
+          const currentAspectRatio =
+            useStudioStore.getState().aspectRatio || "4:5";
           const size = getCanvasSize(currentAspectRatio);
           const imageWidth = size.width * 0.88;
           const imageHeight = size.height * 0.45;
@@ -475,10 +484,20 @@ export const useCanvasStore = create<CanvasState>()(
           if (!current) return state;
           const slide = state.slidesByCardId[current];
           if (!slide) return state;
+
+          const newMetadata =
+            element.type === "image"
+              ? { ...slide.metadata, autoSynced: true }
+              : slide.metadata;
+
           return {
             slidesByCardId: {
               ...state.slidesByCardId,
-              [current]: { ...slide, elements: [...slide.elements, element] },
+              [current]: {
+                ...slide,
+                metadata: newMetadata,
+                elements: [...slide.elements, element],
+              },
             },
             selectedElementIds: [element.id],
           };

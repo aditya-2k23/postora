@@ -1,5 +1,4 @@
-import { AspectRatio } from "@/lib/constants";
-export type { AspectRatio };
+import type { AspectRatio } from "@/lib/constants";
 
 export type CanvasSize = {
   width: number;

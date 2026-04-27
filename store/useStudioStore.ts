@@ -53,6 +53,9 @@ interface StudioState {
   undoStack: SocialCard[][];
   redoStack: SocialCard[][];
 
+  // Monotonically increasing counter to reliably detect state changes
+  studioVersion: number;
+
   setPrompt: (prompt: string) => void;
   setTone: (tone: string) => void;
   setPlatform: (platform: string) => void;
@@ -128,6 +131,7 @@ export const useStudioStore = create<StudioState>()(
       isAssistantThinking: false,
       undoStack: [],
       redoStack: [],
+      studioVersion: 0,
 
       setPrompt: (prompt) => set({ prompt }),
       setTone: (tone) => set({ tone }),
@@ -167,14 +171,16 @@ export const useStudioStore = create<StudioState>()(
       addChatMessage: (message) =>
         set((state) => ({
           chatHistory: [...state.chatHistory, message],
+          studioVersion: state.studioVersion + 1,
         })),
-      setChatHistory: (chatHistory) => set({ chatHistory }),
+      setChatHistory: (chatHistory) => set((state) => ({ chatHistory, studioVersion: state.studioVersion + 1 })),
 
       addAssistantMessage: (message) =>
         set((state) => ({
           assistantHistory: [...state.assistantHistory, message],
+          studioVersion: state.studioVersion + 1,
         })),
-      setAssistantHistory: (assistantHistory) => set({ assistantHistory }),
+      setAssistantHistory: (assistantHistory) => set((state) => ({ assistantHistory, studioVersion: state.studioVersion + 1 })),
 
       setIsAssistantThinking: (isAssistantThinking) =>
         set({ isAssistantThinking }),
@@ -229,11 +235,13 @@ export const useStudioStore = create<StudioState>()(
           isAssistantThinking: false,
           undoStack: [],
           redoStack: [],
+          studioVersion: 0,
         }),
     }),
     {
       name: "social-studio-storage",
       partialize: (state) => ({
+        studioVersion: state.studioVersion,
         prompt: state.prompt,
         tone: state.tone,
         platform: state.platform,

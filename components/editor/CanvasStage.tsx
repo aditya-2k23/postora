@@ -162,9 +162,16 @@ export function CanvasStage({
     return () => observer.disconnect();
   }, []);
 
+  const [stageReady, setStageReady] = useState(false);
   useEffect(() => {
-    if (stageRef.current) onStageReady(stageRef.current);
-    return () => onStageReady(null);
+    if (stageRef.current) {
+      setStageReady(true);
+      onStageReady(stageRef.current);
+    }
+    return () => {
+      setStageReady(false);
+      onStageReady(null);
+    };
   }, [onStageReady]);
 
   useEffect(() => {
@@ -172,10 +179,13 @@ export function CanvasStage({
     const container = stageRef.current.container();
     if (activeTool === "grab") {
       container.style.cursor = "grab";
+    } else if (activeTool === "select") {
+      container.style.cursor = "default";
     } else {
-      container.style.cursor = "";
+      container.style.cursor = "crosshair";
     }
-  }, [activeTool]);
+  }, [activeTool, stageReady]);
+
 
   useEffect(() => {
     if (!newlyCreatedIdRef.current) return;

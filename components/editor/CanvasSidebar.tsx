@@ -69,7 +69,7 @@ export function CanvasSidebar({
   }, [selectedIds]);
 
   const selected = slideElements.find((el) => selectedIds[0] === el.id);
-  const selectedText = selected?.type === "text" ? (selected as any) : null;
+  const selectedText = selected?.type === "text" ? selected : null;
 
   // Local state for color inputs to prevent flooding
   const [localCanvasBg, setLocalCanvasBg] = useState(backgroundColor);
@@ -85,16 +85,15 @@ export function CanvasSidebar({
     }
   }, [selected?.id, selectedText?.fill]);
 
-  const [localText, setLocalText] = useState(selectedText?.text || "");
+  const isTypingRef = useRef(false);
+  const [typingText, setTypingText] = useState("");
+  const displayValue = isTypingRef.current
+    ? typingText
+    : selectedText?.text || "";
 
   // Refs to keep global listeners updated without re-binding
-  const localTextRef = useRef(localText);
   const localFillRef = useRef(localFill);
   const localCanvasBgRef = useRef(localCanvasBg);
-
-  useEffect(() => {
-    localTextRef.current = localText;
-  }, [localText]);
 
   useEffect(() => {
     localFillRef.current = localFill;
@@ -112,12 +111,6 @@ export function CanvasSidebar({
     selectedElements.length > 1 &&
     selectedElements.every((el) => el.type === selectedElements[0].type);
 
-  useEffect(() => {
-    if (selectedText?.text !== undefined) {
-      setLocalText(selectedText.text);
-    }
-  }, [selected?.id, selectedText?.text]);
-
   const applyStyleUpdate = useCallback(
     (updates: Partial<SlideElement>, pushHistory = true) => {
       const targetId = selected?.id || lastSelectedIdRef.current;
@@ -134,8 +127,14 @@ export function CanvasSidebar({
   // Global click listener to commit color changes when clicking outside
   useEffect(() => {
     const handleGlobalMouseDown = (e: MouseEvent) => {
-      // If clicking outside the sidebar or on the canvas, commit the local color
       const target = e.target as HTMLElement;
+
+      // Bail out early if clicking inside the sidebar
+      if (target.closest(".canvas-sidebar")) {
+        return;
+      }
+
+      // If clicking outside the sidebar or on the canvas, commit the local color
       const isInput =
         target.tagName === "INPUT" ||
         target.tagName === "TEXTAREA" ||
@@ -154,19 +153,6 @@ export function CanvasSidebar({
             onUpdateElement(
               commitId,
               { fill: localFillRef.current },
-              {
-                applyScope: "single",
-                pushHistory: true,
-              },
-            );
-          }
-          if (
-            original.type === "text" &&
-            localTextRef.current !== original.text
-          ) {
-            onUpdateElement(
-              commitId,
-              { text: localTextRef.current },
               {
                 applyScope: "single",
                 pushHistory: true,
@@ -206,7 +192,7 @@ export function CanvasSidebar({
     if (el?.type !== "text") return;
     const parsed = parseNumericInput(value);
     if (parsed === null) {
-      inputEl.value = String(selectedText.fontSize);
+      inputEl.value = String(el.fontSize);
       return;
     }
     applyStyleUpdate({ fontSize: parsed });
@@ -447,20 +433,25 @@ export function CanvasSidebar({
             Text
           </p>
           <textarea
-            value={localText}
-            onChange={(evt) => setLocalText(evt.target.value)}
+            value={displayValue}
+            onFocus={() => {
+              isTypingRef.current = true;
+              setTypingText(selectedText?.text || "");
+            }}
+            onChange={(evt) => setTypingText(evt.target.value)}
             onBlur={() => {
+              isTypingRef.current = false;
               const commitId = lastSelectedIdRef.current;
               const original = slideElements.find((el) => el.id === commitId);
               if (
                 commitId &&
                 original &&
                 original.type === "text" &&
-                localText !== original.text
+                displayValue !== original.text
               ) {
                 onUpdateElement(
                   commitId,
-                  { text: localText },
+                  { text: displayValue },
                   {
                     applyScope: "single",
                     pushHistory: true,
@@ -524,6 +515,7 @@ export function CanvasSidebar({
                       applyScope: hasMultiSameTypeSelection
                         ? "matching-selection"
                         : "single",
+                      pushHistory: true,
                     },
                   );
                 }}
@@ -547,6 +539,7 @@ export function CanvasSidebar({
                       applyScope: hasMultiSameTypeSelection
                         ? "matching-selection"
                         : "single",
+                      pushHistory: true,
                     },
                   );
                 }}

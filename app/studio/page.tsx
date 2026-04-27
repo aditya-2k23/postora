@@ -34,6 +34,26 @@ import {
 import { Button } from "@/components/ui/button";
 
 const SIDE_COLLAPSED_SIZE_PX = 56;
+
+/**
+ * Recursively removes all `undefined` values from an object so that
+ * Firestore (which rejects `undefined` fields) never receives them.
+ */
+function sanitizeForFirestore<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeForFirestore) as unknown as T;
+  }
+  if (value !== null && typeof value === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v !== undefined) {
+        result[k] = sanitizeForFirestore(v);
+      }
+    }
+    return result as T;
+  }
+  return value;
+}
 const SLIDES_COLLAPSED_SIZE_PX = 52;
 
 export default function StudioPage() {
@@ -357,13 +377,13 @@ export default function StudioPage() {
     const timer = window.setTimeout(async () => {
       try {
         const projectRef = doc(db, `users/${user.uid}/projects/${projectId}`);
-        const canvasPayload = {
+        const canvasPayload = sanitizeForFirestore({
           slidesByCardId: canvasSlides,
           currentSlideId: canvasCurrentSlideId,
           activeTool,
           gridEnabled,
           rulerEnabled,
-        };
+        });
 
         try {
           await updateDoc(projectRef, {

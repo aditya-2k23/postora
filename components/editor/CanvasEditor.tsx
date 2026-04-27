@@ -5,8 +5,8 @@ import type Konva from "konva";
 import {
   ASPECT_RATIO_DIMENSIONS,
   SlideElement,
-  type AspectRatio,
 } from "@/types/canvas";
+import { type AspectRatio } from "@/lib/constants";
 import { useShallow } from "zustand/shallow";
 import { useCanvasStore } from "@/store/useCanvasStore";
 import { useStudioStore } from "@/store/useStudioStore";
@@ -15,14 +15,15 @@ import { CanvasStage } from "@/components/editor/CanvasStage";
 import { TextEditorOverlay } from "@/components/editor/TextEditorOverlay";
 import { LayoutTemplate } from "lucide-react";
 
-const isTypingTarget = (target: any) => {
+const isTypingTarget = (target: EventTarget | null) => {
   if (!target) return false;
-  const tag = target.tagName?.toUpperCase();
+  const el = target as HTMLElement;
+  const tag = el.tagName?.toUpperCase();
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
     return true;
   }
-  if (target.isContentEditable) return true;
-  return !!(target.closest && target.closest("[contenteditable='true']"));
+  if (el.isContentEditable) return true;
+  return !!(el.closest && el.closest("[contenteditable='true']"));
 };
 
 export function CanvasEditor() {
@@ -155,9 +156,7 @@ export function CanvasEditor() {
       if (!cardSlide) return;
 
       const hasImage = cardSlide.elements.some((el) => el.type === "image");
-      const isUnpopulated =
-        cardSlide.elements.length === 0 ||
-        cardSlide.metadata?.autoSynced === undefined;
+      const isUnpopulated = cardSlide.metadata?.autoSynced !== true;
 
       // Only auto-sync image if card has one and the slide hasn't been synced or is empty
       // This prevents resurrecting images the user might have deleted.
@@ -193,7 +192,8 @@ export function CanvasEditor() {
       const target = evt.target as HTMLElement;
 
       // 1. Check for global commands that we want to intercept early
-      // Note: We use capturing phase to beat browser defaults like Ctrl+D (bookmark), Ctrl+Y (history)
+      // Note: We actively use the capturing phase to intercept browser defaults 
+      // like Ctrl+D (bookmark) or Ctrl+Y (history) before they run.
       const isShortcut =
         isMeta &&
         (key === "d" ||
@@ -306,8 +306,8 @@ export function CanvasEditor() {
       }
     };
 
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    window.addEventListener("keydown", handler, { capture: true, passive: false });
+    return () => window.removeEventListener("keydown", handler, { capture: true });
   }, [
     copySelected,
     pasteClipboard,

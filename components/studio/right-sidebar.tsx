@@ -9,6 +9,7 @@ import { useStudioStore } from "@/store/useStudioStore";
 import { useAuth } from "@/components/auth-provider";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import type { TextElement } from "@/types/canvas";
 
 export function RightSidebar() {
   const { user, loading } = useAuth();
@@ -96,6 +97,20 @@ export function RightSidebar() {
             pushHistory();
           }
 
+          const syncToCard = (targetId: string) => {
+            if (!slideId) return;
+            const el = slide.elements.find((e) => e.id === targetId);
+            if (el?.type === "text" && el.role) {
+              const textValue = (updates as Partial<TextElement>).text;
+              if (textValue !== undefined) {
+                if (el.role === "title")
+                  updateCard(slideId, { title: textValue });
+                if (el.role === "body")
+                  updateCard(slideId, { content: textValue });
+              }
+            }
+          };
+
           if (applyScope === "matching-selection") {
             const source = slide.elements.find((el) => el.id === id);
             if (source) {
@@ -110,6 +125,7 @@ export function RightSidebar() {
               if (matchingIds.length > 1) {
                 matchingIds.forEach((targetId) => {
                   updateElement(targetId, updates);
+                  syncToCard(targetId);
                 });
                 return;
               }
@@ -117,20 +133,7 @@ export function RightSidebar() {
           }
 
           updateElement(id, updates);
-
-          // Sync back to card store if it's a role-based text element
-          if (slideId) {
-            const el = slide.elements.find((e) => e.id === id);
-            if (el?.type === "text" && el.role) {
-              const textValue = (updates as any).text;
-              if (textValue !== undefined) {
-                if (el.role === "title")
-                  updateCard(slideId, { title: textValue });
-                if (el.role === "body")
-                  updateCard(slideId, { content: textValue });
-              }
-            }
-          }
+          syncToCard(id);
         }}
         onAlign={(dir) => {
           pushHistory();
