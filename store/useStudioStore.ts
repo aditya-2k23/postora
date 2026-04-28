@@ -235,21 +235,29 @@ export const useStudioStore = create<StudioState>()(
         }),
 
       reset: () => {
-        const defaultCardId = crypto.randomUUID();
+        const defaultCardId = "default-slide-1";
         set({
           prompt: "",
-          cards: [{
-            id: defaultCardId,
-            title: "Slide 1",
-            content: "Add your text here...",
-          }],
+          tone: "Professional",
+          platform: "Instagram Carousel",
+          aspectRatio: "4:5",
+          numCards: 5,
+          cards: [
+            {
+              id: defaultCardId,
+              title: "Slide 1",
+              content: "Add your text here...",
+            },
+          ],
           activeCardId: defaultCardId,
+          themeSettings: defaultTheme,
+          isGenerating: false,
+          isAssistantThinking: false,
           projectId: null,
           projectName: null,
           quotaRemaining: null,
           chatHistory: [],
           assistantHistory: [],
-          isAssistantThinking: false,
           undoStack: [],
           redoStack: [],
           studioVersion: 0,

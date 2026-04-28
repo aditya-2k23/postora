@@ -5,6 +5,7 @@ import { Image as KonvaImage } from "konva/lib/shapes/Image";
 import { Line } from "konva/lib/shapes/Line";
 import { Rect } from "konva/lib/shapes/Rect";
 import { Text } from "konva/lib/shapes/Text";
+import { Group } from "konva/lib/Group";
 import jsPDF from "jspdf";
 import JSZip from "jszip";
 import { useCanvasStore } from "@/store/useCanvasStore";
@@ -111,32 +112,36 @@ const addElementToLayer = async (element: SlideElement, layer: Layer) => {
     } catch (err) {
       console.warn(`[Export] Image failed to load: ${element.src}`, err);
       // Draw a visible placeholder instead of silently dropping the element
-      layer.add(
+      const group = new Group({
+        x: element.x,
+        y: element.y,
+        rotation: element.rotation ?? 0,
+      });
+      group.add(
         new Rect({
-          x: element.x,
-          y: element.y,
+          x: 0,
+          y: 0,
           width: element.width,
           height: element.height,
           fill: "#e5e7eb", // gray-200
           stroke: "#d1d5db", // gray-300
           strokeWidth: 1,
           cornerRadius: element.cornerRadius ?? 0,
-          rotation: element.rotation ?? 0,
         }),
       );
-      layer.add(
+      group.add(
         new Text({
-          x: element.x,
-          y: element.y + element.height / 2 - 6,
+          x: 0,
+          y: element.height / 2 - 6,
           text: "Image not found",
           width: element.width,
           fontSize: 12,
           fontStyle: "bold",
           fill: "#6b7280", // gray-500
           align: "center",
-          rotation: element.rotation ?? 0,
         }),
       );
+      layer.add(group);
     }
     return;
   }

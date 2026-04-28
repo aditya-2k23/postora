@@ -185,7 +185,7 @@ export function StudioNavbar() {
       const mainPayload = {
         id: pId,
         userId: user.uid,
-        ...(projectName ? { projectName } : {}),
+        projectName: projectName || null,
         prompt,
         tone,
         platform,

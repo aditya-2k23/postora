@@ -85,9 +85,9 @@ export function CanvasSidebar({
     }
   }, [selected?.id, selectedText?.fill]);
 
-  const isTypingRef = useRef(false);
+  const [isTyping, setIsTyping] = useState(false);
   const [typingText, setTypingText] = useState("");
-  const displayValue = isTypingRef.current
+  const displayValue = isTyping
     ? typingText
     : selectedText?.text || "";
 
@@ -148,16 +148,9 @@ export function CanvasSidebar({
         if (commitId && original) {
           if (
             original.type === "text" &&
-            localFillRef.current !== original.fill
+            normalizeColor(localFillRef.current) !== normalizeColor(original.fill)
           ) {
-            onUpdateElement(
-              commitId,
-              { fill: localFillRef.current },
-              {
-                applyScope: "single",
-                pushHistory: true,
-              },
-            );
+            applyStyleUpdate({ fill: normalizeColor(localFillRef.current) });
           }
         }
 
@@ -435,12 +428,12 @@ export function CanvasSidebar({
           <textarea
             value={displayValue}
             onFocus={() => {
-              isTypingRef.current = true;
+              setIsTyping(true);
               setTypingText(selectedText?.text || "");
             }}
             onChange={(evt) => setTypingText(evt.target.value)}
             onBlur={() => {
-              isTypingRef.current = false;
+              setIsTyping(false);
               const commitId = lastSelectedIdRef.current;
               const original = slideElements.find((el) => el.id === commitId);
               if (
@@ -449,14 +442,7 @@ export function CanvasSidebar({
                 original.type === "text" &&
                 displayValue !== original.text
               ) {
-                onUpdateElement(
-                  commitId,
-                  { text: displayValue },
-                  {
-                    applyScope: "single",
-                    pushHistory: true,
-                  },
-                );
+                applyStyleUpdate({ text: displayValue });
               }
             }}
             className="w-full min-h-20 rounded-md border border-border bg-background px-2 py-1 text-xs"
@@ -508,16 +494,7 @@ export function CanvasSidebar({
                 onClick={() => {
                   const color = "#000000";
                   setLocalFill(color);
-                  onUpdateElement(
-                    selected.id,
-                    { fill: color },
-                    {
-                      applyScope: hasMultiSameTypeSelection
-                        ? "matching-selection"
-                        : "single",
-                      pushHistory: true,
-                    },
-                  );
+                  applyStyleUpdate({ fill: color });
                 }}
               />
               <button
@@ -532,16 +509,7 @@ export function CanvasSidebar({
                 onClick={() => {
                   const color = "#ffffff";
                   setLocalFill(color);
-                  onUpdateElement(
-                    selected.id,
-                    { fill: color },
-                    {
-                      applyScope: hasMultiSameTypeSelection
-                        ? "matching-selection"
-                        : "single",
-                      pushHistory: true,
-                    },
-                  );
+                  applyStyleUpdate({ fill: color });
                 }}
               />
               <div className="relative h-8 w-8">

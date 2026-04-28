@@ -334,7 +334,13 @@ function ProjectCard({
         tabIndex={0}
         onClick={!isRenaming ? onOpen : undefined}
         onKeyDown={(e) => {
-          if (!isRenaming && (e.key === "Enter" || e.key === " ")) onOpen();
+          if (
+            !isRenaming &&
+            (e.key === "Enter" || e.key === " " || e.key === "Spacebar")
+          ) {
+            e.preventDefault();
+            onOpen();
+          }
         }}
         className={`flex-1 flex flex-col p-6 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 ${isDeleting ? "opacity-50 pointer-events-none" : ""}`}
       >

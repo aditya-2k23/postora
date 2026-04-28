@@ -38,21 +38,17 @@ export function TextEditorOverlay({
   const draftRef = useRef(draftValue);
 
   // ── Core: whenever editingElementId changes, reset the session ──
-  // This handles both initial mount AND switching between elements using derived state
-  // to avoid a double-render cascade.
-  if (editingElementId !== sessionIdRef.current) {
-    sessionIdRef.current = editingElementId;
-    committedRef.current = false;
-    cancelledRef.current = false;
-    
-    if (editingElementId && target) {
-      setDraftValue(target.text);
-      draftRef.current = target.text;
-    } else {
-      setDraftValue("");
-      draftRef.current = "";
+  useEffect(() => {
+    if (editingElementId !== sessionIdRef.current) {
+      sessionIdRef.current = editingElementId;
+      committedRef.current = false;
+      cancelledRef.current = false;
+
+      const initialText = target ? target.text : "";
+      setDraftValue(initialText);
+      draftRef.current = initialText;
     }
-  }
+  }, [editingElementId, target]);
 
   const style = useMemo(() => {
     if (!stage || !target) return null;

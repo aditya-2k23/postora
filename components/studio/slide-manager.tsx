@@ -272,9 +272,6 @@ export function SlideManager() {
     }
   };
 
-  // Removed early return null for empty cards to ensure 'Add Slide' button is always reachable.
-  // if (cards.length === 0) return null;
-
   return (
     <div
       className="w-full h-full bg-card/50 flex flex-col shrink-0 min-w-0 min-h-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
@@ -353,9 +350,9 @@ export function SlideManager() {
           <DialogHeader>
             <DialogTitle className="text-xl">Unlock More Slides</DialogTitle>
             <DialogDescription className="py-2">
-              You've reached the 3-slide limit for guest users. Sign up or log
-              in to create unlimited slides, use our AI generation features, and
-              securely save your project!
+              You&apos;ve reached the 3-slide limit for guest users. Sign up or
+              log in to create unlimited slides, use our AI generation features,
+              and securely save your project!
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-4 gap-2">

@@ -217,12 +217,22 @@ export default function StudioPage() {
   useEffect(() => {
     if (!mounted || !user || projectId || migrationInFlightRef.current) return;
 
-    if (cards.length > 0 || Object.keys(canvasSlides).length > 0) {
+    const isPristine =
+      prompt === "" &&
+      (cards.length === 0 ||
+        (cards.length === 1 &&
+          cards[0].id === "default-slide-1" &&
+          !cards[0].imageUrl &&
+          cards[0].title === "Slide 1" &&
+          cards[0].content === "Add your text here..." &&
+          (canvasSlides[cards[0].id]?.elements?.length ?? 0) <= 2));
+
+    if (!isPristine) {
       const newProjectId = crypto.randomUUID();
       useStudioStore.getState().setProjectId(newProjectId);
       // The Sync effects will catch this new projectId and save it automatically.
     }
-  }, [mounted, user, projectId, cards.length, canvasSlides]);
+  }, [mounted, user, projectId, cards, canvasSlides]);
 
   // Ensure at least one slide exists for new or empty projects
   useEffect(() => {
@@ -230,7 +240,7 @@ export default function StudioPage() {
 
     // If we're not loading a project from Firestore, and we have 0 cards, create a default one.
     if (!user || !projectId || hasLoadedProjectRef.current === projectId) {
-      const firstCardId = crypto.randomUUID();
+      const firstCardId = "default-slide-1";
       useStudioStore.setState((state) => ({
         ...state,
         cards: [
@@ -275,7 +285,7 @@ export default function StudioPage() {
 
         // 1. Populate Studio Store
         const studio = useStudioStore.getState();
-        if (data.projectName !== undefined) studio.setProjectName(data.projectName);
+        studio.setProjectName(data.projectName || "");
         if (data.prompt !== undefined) studio.setPrompt(data.prompt);
         if (data.tone !== undefined) studio.setTone(data.tone);
         if (data.platform !== undefined) studio.setPlatform(data.platform);
@@ -355,7 +365,7 @@ export default function StudioPage() {
         const payload = {
           id: projectId,
           userId: user.uid,
-          ...(projectName ? { projectName } : {}),
+          projectName: projectName || null,
           prompt,
           platform,
           tone,
