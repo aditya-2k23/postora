@@ -21,6 +21,18 @@ import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useCanvasStore } from "@/store/useCanvasStore";
+import { useAuth } from "@/components/auth-provider";
+import { Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 function SortableThumbnail({
   card,
@@ -145,6 +157,26 @@ export function SlideManager() {
   >(null);
   const reorderPulseTimeoutRef = useRef<number | null>(null);
 
+  const { user } = useAuth();
+  const router = useRouter();
+  const [showLimitModal, setShowLimitModal] = useState(false);
+
+  const handleAddSlide = () => {
+    if (!user && cards.length >= 3) {
+      setShowLimitModal(true);
+      return;
+    }
+
+    const newCard: SocialCard = {
+      id: crypto.randomUUID(),
+      title: "New Slide",
+      content: "Add your text here...",
+    };
+
+    setCards([...cards, newCard]);
+    selectSlide(newCard.id);
+  };
+
   const selectSlide = useCallback(
     (cardId: string) => {
       setActiveCardId(cardId);
@@ -240,7 +272,8 @@ export function SlideManager() {
     }
   };
 
-  if (cards.length === 0) return null;
+  // Removed early return null for empty cards to ensure 'Add Slide' button is always reachable.
+  // if (cards.length === 0) return null;
 
   return (
     <div
@@ -297,10 +330,51 @@ export function SlideManager() {
                   isRecentlyReordered={recentlyReorderedCardId === c.id}
                 />
               ))}
+
+              <div className="flex flex-col items-center gap-1.5 shrink-0">
+                <button
+                  onClick={handleAddSlide}
+                  className="h-20 w-16 border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 rounded-lg flex items-center justify-center text-muted-foreground hover:text-primary transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                  aria-label="Add Slide"
+                >
+                  <Plus className="w-5 h-5" />
+                </button>
+                <span className="text-[10px] font-medium text-muted-foreground opacity-0 pointer-events-none">
+                  Hidden
+                </span>
+              </div>
             </div>
           </SortableContext>
         </DndContext>
       </div>
+
+      <Dialog open={showLimitModal} onOpenChange={setShowLimitModal}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="text-xl">Unlock More Slides</DialogTitle>
+            <DialogDescription className="py-2">
+              You've reached the 3-slide limit for guest users. Sign up or log
+              in to create unlimited slides, use our AI generation features, and
+              securely save your project!
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-4 gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => setShowLimitModal(false)}
+              className="font-medium"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => router.push("/login?redirect=/studio&intent=save")}
+              className="font-bold bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              Sign Up to add more!
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

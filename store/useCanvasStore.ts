@@ -2,7 +2,8 @@
 
 import type Konva from "konva";
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
+import { idbStorage } from "@/lib/idbStorage";
 import {
   useStudioStore,
   type SocialCard,
@@ -244,7 +245,7 @@ export const useCanvasStore = create<CanvasState>()(
   persist(
     (set, get) => ({
       slidesByCardId: {},
-      currentSlideId: null,
+      currentSlideId: "default-slide-1",
       selectedElementIds: [],
       activeTool: "select",
       clipboard: null,
@@ -894,12 +895,15 @@ export const useCanvasStore = create<CanvasState>()(
       reset: () =>
         set({
           slidesByCardId: {},
-          currentSlideId: null,
+          currentSlideId: "default-slide-1",
           selectedElementIds: [],
           activeTool: "select",
           clipboard: null,
           historyPast: [],
           historyFuture: [],
+          gridEnabled: false,
+          rulerEnabled: false,
+          stageRefs: {},
           textEditing: null,
         }),
     }),
@@ -912,6 +916,7 @@ export const useCanvasStore = create<CanvasState>()(
         gridEnabled: state.gridEnabled,
         rulerEnabled: state.rulerEnabled,
       }),
+      storage: createJSONStorage(() => idbStorage),
     },
   ),
 );

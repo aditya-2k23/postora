@@ -406,6 +406,8 @@ export function StudioNavbar() {
             variant="ghost"
             size="sm"
             onClick={async () => {
+              useStudioStore.getState().reset();
+              useCanvasStore.getState().reset();
               await signOut();
               toast.success("Successfully logged out.");
             }}

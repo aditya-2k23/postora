@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
+import { idbStorage } from "@/lib/idbStorage";
 
 export type SocialCard = {
   id: string;
@@ -122,8 +123,14 @@ export const useStudioStore = create<StudioState>()(
       platform: "Instagram Carousel",
       aspectRatio: "4:5",
       numCards: 5,
-      cards: [],
-      activeCardId: null,
+      cards: [
+        {
+          id: "default-slide-1",
+          title: "Slide 1",
+          content: "Add your text here...",
+        }
+      ],
+      activeCardId: "default-slide-1",
       themeSettings: defaultTheme,
       isGenerating: false,
       projectId: null,
@@ -227,11 +234,16 @@ export const useStudioStore = create<StudioState>()(
           };
         }),
 
-      reset: () =>
+      reset: () => {
+        const defaultCardId = crypto.randomUUID();
         set({
           prompt: "",
-          cards: [],
-          activeCardId: null,
+          cards: [{
+            id: defaultCardId,
+            title: "Slide 1",
+            content: "Add your text here...",
+          }],
+          activeCardId: defaultCardId,
           projectId: null,
           projectName: null,
           quotaRemaining: null,
@@ -241,7 +253,8 @@ export const useStudioStore = create<StudioState>()(
           undoStack: [],
           redoStack: [],
           studioVersion: 0,
-        }),
+        });
+      },
     }),
     {
       name: "social-studio-storage",
@@ -259,6 +272,7 @@ export const useStudioStore = create<StudioState>()(
         chatHistory: truncateArray(state.chatHistory, UNDO_STACK_LIMIT),
         assistantHistory: truncateArray(state.assistantHistory, UNDO_STACK_LIMIT),
       }),
+      storage: createJSONStorage(() => idbStorage),
     },
   ),
 );

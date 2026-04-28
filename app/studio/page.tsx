@@ -213,6 +213,42 @@ export default function StudioPage() {
     canvasCurrentSlideIdRef.current = canvasCurrentSlideId;
   }, [canvasCurrentSlideId]);
 
+  // Auto-create project for signed-in users returning with local anonymous data
+  useEffect(() => {
+    if (!mounted || !user || projectId || migrationInFlightRef.current) return;
+
+    if (cards.length > 0 || Object.keys(canvasSlides).length > 0) {
+      const newProjectId = crypto.randomUUID();
+      useStudioStore.getState().setProjectId(newProjectId);
+      // The Sync effects will catch this new projectId and save it automatically.
+    }
+  }, [mounted, user, projectId, cards.length, canvasSlides]);
+
+  // Ensure at least one slide exists for new or empty projects
+  useEffect(() => {
+    if (!mounted || cards.length > 0) return;
+
+    // If we're not loading a project from Firestore, and we have 0 cards, create a default one.
+    if (!user || !projectId || hasLoadedProjectRef.current === projectId) {
+      const firstCardId = crypto.randomUUID();
+      useStudioStore.setState((state) => ({
+        ...state,
+        cards: [
+          {
+            id: firstCardId,
+            title: "Slide 1",
+            content: "Add your text here...",
+          },
+        ],
+        activeCardId: firstCardId,
+      }));
+      useCanvasStore.setState((state) => ({
+        ...state,
+        currentSlideId: firstCardId,
+      }));
+    }
+  }, [mounted, cards.length, user, projectId]);
+
   // Initial project & canvas load for existing projects
   useEffect(() => {
     if (
