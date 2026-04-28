@@ -35,6 +35,7 @@ export function KonvaTransformer({
   return (
     <Transformer
       ref={transformerRef}
+      name="Transformer"
       rotateEnabled
       keepRatio={selectedIds.length === 1 && (
         elements.find(el => el.id === selectedIds[0])?.type === 'image' || 

@@ -12,6 +12,7 @@ import {
 import "@/lib/konva-shapes";
 import useImage from "use-image";
 import type { SlideElement } from "@/types/canvas";
+import { isBoldWeight } from "@/lib/typography";
 
 type Props = {
   element: SlideElement;
@@ -103,7 +104,7 @@ const TextNode = memo(function TextNode({
       width={element.width}
       fontSize={element.fontSize}
       fontFamily={element.fontFamily}
-      fontStyle={element.fontWeight?.includes("700") ? "bold" : "normal"}
+      fontStyle={isBoldWeight(element.fontWeight) ? "bold" : "normal"}
       fill={element.fill}
       align={element.align}
       lineHeight={element.lineHeight}

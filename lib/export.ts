@@ -5,14 +5,17 @@ import { Image as KonvaImage } from "konva/lib/shapes/Image";
 import { Line } from "konva/lib/shapes/Line";
 import { Rect } from "konva/lib/shapes/Rect";
 import { Text } from "konva/lib/shapes/Text";
+import { Group } from "konva/lib/Group";
 import jsPDF from "jspdf";
+import JSZip from "jszip";
 import { useCanvasStore } from "@/store/useCanvasStore";
 import { useStudioStore } from "@/store/useStudioStore";
 import {
   ASPECT_RATIO_DIMENSIONS,
-  type AspectRatio,
   type SlideElement,
 } from "@/types/canvas";
+import type { AspectRatio } from "@/lib/constants";
+import { isBoldWeight } from "./typography";
 
 const loadImage = (src: string) =>
   new Promise<HTMLImageElement>((resolve, reject) => {
@@ -77,7 +80,7 @@ const addElementToLayer = async (element: SlideElement, layer: Layer) => {
         width: element.width,
         fontSize: element.fontSize,
         fontFamily: element.fontFamily,
-        fontStyle: element.fontWeight?.includes("700") ? "bold" : "normal",
+        fontStyle: isBoldWeight(element.fontWeight) ? "bold" : "normal",
         fill: element.fill,
         align: element.align ?? "left",
         lineHeight: element.lineHeight ?? 1.3,
@@ -106,8 +109,39 @@ const addElementToLayer = async (element: SlideElement, layer: Layer) => {
           crop: element.crop,
         }),
       );
-    } catch {
-      return;
+    } catch (err) {
+      console.warn(`[Export] Image failed to load: ${element.src}`, err);
+      // Draw a visible placeholder instead of silently dropping the element
+      const group = new Group({
+        x: element.x,
+        y: element.y,
+        rotation: element.rotation ?? 0,
+      });
+      group.add(
+        new Rect({
+          x: 0,
+          y: 0,
+          width: element.width,
+          height: element.height,
+          fill: "#e5e7eb", // gray-200
+          stroke: "#d1d5db", // gray-300
+          strokeWidth: 1,
+          cornerRadius: element.cornerRadius ?? 0,
+        }),
+      );
+      group.add(
+        new Text({
+          x: 0,
+          y: element.height / 2 - 6,
+          text: "Image not found",
+          width: element.width,
+          fontSize: 12,
+          fontStyle: "bold",
+          fill: "#6b7280", // gray-500
+          align: "center",
+        }),
+      );
+      layer.add(group);
     }
     return;
   }
@@ -184,13 +218,35 @@ export const exportToPNG = async () => {
   const slides = await getAllSlideExports();
   if (slides.length === 0) throw new Error("No slides found");
 
-  for (let i = 0; i < slides.length; i += 1) {
+  // Short-circuit for single slide export
+  if (slides.length === 1) {
     const link = document.createElement("a");
-    link.download = `social-card-${i + 1}.png`;
-    link.href = slides[i].dataUrl;
+    link.href = slides[0].dataUrl;
+    link.download = "social-card.png";
+    document.body.appendChild(link);
     link.click();
-    await new Promise((resolve) => setTimeout(resolve, 120));
+    document.body.removeChild(link);
+    return;
   }
+
+  const zip = new JSZip();
+
+  for (let i = 0; i < slides.length; i += 1) {
+    const response = await fetch(slides[i].dataUrl);
+    const blob = await response.blob();
+    zip.file(`social-card-${i + 1}.png`, blob);
+  }
+
+  const content = await zip.generateAsync({ type: "blob" });
+  const url = URL.createObjectURL(content);
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "social-cards.zip";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 100);
 };
 
 export const exportToPDF = async () => {

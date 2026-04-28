@@ -9,13 +9,22 @@ import { useStudioStore } from "@/store/useStudioStore";
 import { useAuth } from "@/components/auth-provider";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import type { TextElement } from "@/types/canvas";
 
 export function RightSidebar() {
   const { user, loading } = useAuth();
   const router = useRouter();
 
-  const { cards, activeCardId, aspectRatio, updateCard, themeSettings } =
-    useStudioStore();
+  const {
+    cards,
+    activeCardId,
+    aspectRatio,
+    updateCard,
+    themeSettings,
+    projectId,
+    setQuotaRemaining,
+  } = useStudioStore();
+
   const {
     slidesByCardId,
     currentSlideId,
@@ -31,6 +40,7 @@ export function RightSidebar() {
     setElementLock,
     duplicateSelected,
     addElement,
+    syncCardImage,
   } = useCanvasStore();
 
   const slideId = currentSlideId ?? activeCardId;
@@ -79,8 +89,27 @@ export function RightSidebar() {
           pushHistory();
           setBackgroundColor(color);
         }}
-        onUpdateElement={(id, updates, applyScope = "single") => {
-          pushHistory();
+        onUpdateElement={(id, updates, options) => {
+          const { applyScope = "single", pushHistory: shouldPush = false } =
+            options || {};
+
+          if (shouldPush || applyScope === "matching-selection") {
+            pushHistory();
+          }
+
+          const syncToCard = (targetId: string) => {
+            if (!slideId) return;
+            const el = slide.elements.find((e) => e.id === targetId);
+            if (el?.type === "text" && el.role) {
+              const textValue = (updates as Partial<TextElement>).text;
+              if (textValue !== undefined) {
+                if (el.role === "title")
+                  updateCard(slideId, { title: textValue });
+                if (el.role === "body")
+                  updateCard(slideId, { content: textValue });
+              }
+            }
+          };
 
           if (applyScope === "matching-selection") {
             const source = slide.elements.find((el) => el.id === id);
@@ -96,6 +125,7 @@ export function RightSidebar() {
               if (matchingIds.length > 1) {
                 matchingIds.forEach((targetId) => {
                   updateElement(targetId, updates);
+                  syncToCard(targetId);
                 });
                 return;
               }
@@ -103,6 +133,7 @@ export function RightSidebar() {
           }
 
           updateElement(id, updates);
+          syncToCard(id);
         }}
         onAlign={(dir) => {
           pushHistory();
@@ -151,7 +182,7 @@ export function RightSidebar() {
                 prompt: currentCard.imagePrompt,
                 aspectRatio,
                 style: themeSettings.style,
-                projectId: useStudioStore.getState().projectId,
+                projectId,
                 cardId: currentCard.id,
               }),
             });
@@ -172,17 +203,11 @@ export function RightSidebar() {
             }
 
             if (data.quotaRemaining !== undefined) {
-              useStudioStore.getState().setQuotaRemaining(data.quotaRemaining);
+              setQuotaRemaining(data.quotaRemaining);
             }
 
             updateCard(currentCard.id, { imageUrl: data.imageUrl });
-            useCanvasStore
-              .getState()
-              .syncCardImage(
-                currentCard.id,
-                data.imageUrl,
-                selectedImage?.id,
-              );
+            syncCardImage(currentCard.id, data.imageUrl, selectedImage?.id);
             toast.dismiss(loadingToast);
             toast.success("Image regenerated");
           } catch (error: unknown) {

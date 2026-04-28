@@ -18,30 +18,34 @@ cloudinary.config({
  */
 function extractPublicId(url: string): string | null {
   if (!url || !url.includes("cloudinary.com")) return null;
-  
+
   try {
     const parts = url.split("/");
     const uploadIndex = parts.indexOf("upload");
-    if (uploadIndex === -1) return null;
-    
-    // Everything after /upload/v[version]/ or /upload/
-    let publicIdWithExt = "";
-    if (parts[uploadIndex + 1].startsWith("v")) {
-      // It's a versioned URL: .../upload/v12345/public_id.jpg
-      publicIdWithExt = parts.slice(uploadIndex + 2).join("/");
-    } else {
-      // It's a non-versioned URL: .../upload/public_id.jpg
-      publicIdWithExt = parts.slice(uploadIndex + 1).join("/");
-    }
-    
-    // Remove extension
+    if (uploadIndex === -1 || !parts[uploadIndex + 1]) return null;
+
+    const afterUpload = parts.slice(uploadIndex + 1).join("/");
+    // First, strip any query parameters or fragments
+    const cleanPath = afterUpload.split(/[?#]/)[0];
+
+    // Relaxed regex for transformation segments and versioning
+    // Handles tokens like dpr_auto, rad_20, and comma-separated lists
+    const regex =
+      /^(?:(?:[a-zA-Z0-9_,]+_[^\/]+\/|[^\/]+,[^\/]+\/)*?)(?:v\d+\/)?(.+)$/i;
+    const match = cleanPath.match(regex);
+
+    if (!match) return null;
+
+    const publicIdWithExt = match[1];
     const dotIndex = publicIdWithExt.lastIndexOf(".");
+
+    // Strip extension and return public id
     if (dotIndex !== -1) {
       return publicIdWithExt.substring(0, dotIndex);
     }
     return publicIdWithExt;
   } catch (e) {
-    console.error("Failed to extract public ID from URL:", url, e);
+    // Return null on non-matching or malformed URLs rather than throwing
     return null;
   }
 }
@@ -53,70 +57,100 @@ export async function POST(req: Request) {
     const { projectId, imageUrls = [] } = await req.json();
 
     if (!projectId) {
-      return NextResponse.json({ error: "Project ID is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Project ID is required" },
+        { status: 400 },
+      );
     }
 
     const db = getFirebaseAdminDb();
     const projectRef = db.doc(`users/${uid}/projects/${projectId}`);
-    
-    // 1. Get project data to find any image URLs if not provided
+
+    // Get project data to find any image URLs if not provided
     const projectSnap = await projectRef.get();
     if (!projectSnap.exists) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
     const projectData = projectSnap.data();
-    const allImageUrls: string[] = [...imageUrls];
+    const allImageUrls: string[] = [];
 
-    // Collect all image URLs from cards if not provided
-    if (allImageUrls.length === 0 && projectData?.cards) {
+    // 1. ALWAYS build the canonical deletion list from the verified project document first.
+    if (projectData?.cards) {
       projectData.cards.forEach((card: any) => {
-        if (card.imageUrl) allImageUrls.push(card.imageUrl);
+        if (card.imageUrl) {
+          allImageUrls.push(card.imageUrl);
+        }
       });
     }
 
-    // Also check canvas state for custom uploaded images
+    // 2. Also check canvas state for custom uploaded or generated images
     if (projectData?.canvas?.slidesByCardId) {
       Object.values(projectData.canvas.slidesByCardId).forEach((slide: any) => {
         slide.elements?.forEach((el: any) => {
-          if (el.type === "image" && el.src) {
+          if (
+            el.type === "image" &&
+            el.src &&
+            el.src.includes("cloudinary.com")
+          ) {
             allImageUrls.push(el.src);
           }
         });
       });
     }
 
-    // 2. Extract unique public IDs
-    const publicIds = Array.from(new Set(
-      allImageUrls
-        .map(extractPublicId)
-        .filter((id): id is string => id !== null)
-    ));
+    // 3. Merge client-provided imageUrls if they are an array (normalize inputs)
+    if (Array.isArray(imageUrls)) {
+      allImageUrls.push(...imageUrls);
+    }
 
-    console.log(`[delete-project] Deleting ${publicIds.length} images from Cloudinary for project ${projectId}`);
+    // 4. Extract and validate unique public IDs
+    // We strictly enforce that the public ID starts with the user's scoped folder.
+    const allowedPrefixes = [
+      `postora_images/${uid}/`,
+      `postora_uploads/${uid}/`,
+    ];
 
-    // 3. Delete from Cloudinary
-    if (publicIds.length > 0) {
+    const publicIds = Array.from(
+      new Set(
+        allImageUrls.map(extractPublicId).filter((id): id is string => {
+          if (!id) return false;
+          // Security check: ensure the image belongs to the current user
+          return allowedPrefixes.some((prefix) => id.startsWith(prefix));
+        }),
+      ),
+    );
+
+    console.log(
+      `[delete-project] Deleting ${publicIds.length} images from Cloudinary for project ${projectId}`,
+    );
+
+    // 5. Delete from Cloudinary
+    const BATCH = 100;
+    for (let i = 0; i < publicIds.length; i += BATCH) {
+      const chunk = publicIds.slice(i, i + BATCH);
       try {
-        // cloudinary.api.delete_resources is capped at 100, but projects shouldn't have that many.
-        // If they do, we'd need to chunk.
-        await new Promise((resolve, reject) => {
-          cloudinary.api.delete_resources(publicIds, (error, result) => {
-            if (error) reject(error);
-            else resolve(result);
-          });
-        });
+        const res = await cloudinary.api.delete_resources(chunk);
+        if (res && Object.keys(res.deleted || {}).length === 0) {
+          console.warn(
+            "[delete-project] Cloudinary deletion returned no deletions for batch:",
+            res,
+          );
+        }
       } catch (cloudinaryError) {
-        console.error("[delete-project] Cloudinary deletion failed:", cloudinaryError);
-        // We continue anyway to delete the project doc
+        console.error(
+          "[delete-project] Cloudinary deletion failed for batch:",
+          cloudinaryError,
+        );
+        // Continue with remaining batches and Firestore cleanup
       }
     }
 
-    // 4. Delete Firestore project document
+    // 6. Delete Firestore project document
     await projectRef.delete();
 
-    // 5. Delete associated subcollections if any (we don't have any right now according to blueprint)
-    
+    // 7. Delete associated subcollections if any (we don't have any right now according to blueprint)
+
     return NextResponse.json({ success: true });
   } catch (error: any) {
     const authError = toApiAuthErrorResponse(error);
@@ -125,7 +159,7 @@ export async function POST(req: Request) {
     console.error("[delete-project] Error:", error);
     return NextResponse.json(
       { error: "Failed to delete project. Please try again later." },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

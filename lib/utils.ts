@@ -41,3 +41,16 @@ export function getAccessibleTextColor(hexColor: string): string {
 
   return contrastBlack >= contrastWhite ? "#000000" : "#ffffff";
 }
+
+export function normalizeColor(hexColor: string): string {
+  if (!hexColor) return "#000000";
+  const match = hexColor.match(/^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
+  if (!match) return "#000000";
+  const hex = match[1];
+  if (hex.length === 3) {
+    return (
+      "#" + (hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2]).toLowerCase()
+    );
+  }
+  return "#" + hex.toLowerCase();
+}

@@ -1,4 +1,4 @@
-export type AspectRatio = "1:1" | "4:5" | "9:16" | "16:9";
+import type { AspectRatio } from "@/lib/constants";
 
 export type CanvasSize = {
   width: number;
@@ -30,6 +30,7 @@ export type TextElement = {
   opacity?: number;
   locked?: boolean;
   hidden?: boolean;
+  role?: "title" | "body";
 };
 
 export type ImageElement = {
@@ -79,6 +80,9 @@ export type CanvasSlide = {
   cardId: string;
   backgroundColor: string;
   elements: SlideElement[];
+  metadata?: {
+    autoSynced?: boolean;
+  };
 };
 
 export type CanvasHistorySnapshot = {

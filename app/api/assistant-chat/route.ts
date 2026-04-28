@@ -11,6 +11,7 @@ import {
   recordAiUsageEvent,
   toAiSecurityErrorResponse,
   ValidationError,
+  QuotaExceededError,
 } from "@/lib/server/ai-security";
 
 // Model fallback chain
@@ -424,8 +425,28 @@ export async function POST(req: Request) {
           quotaRemaining: quota.remaining,
         });
       } catch (postError: any) {
+        if (
+          postError instanceof QuotaExceededError ||
+          postError?.name === "QuotaExceededError"
+        ) {
+          await recordAiUsageEvent({
+            uid,
+            endpoint: "assistant-chat",
+            success: true,
+            inputChars: message.length,
+            outputChars: finalReply.length,
+            model: selectedModel,
+            metadata: {
+              historyCount: history.length,
+              cardsCount: context.cards.length,
+              platform,
+              quotaExceededAfterGeneration: true,
+            },
+          });
+          throw postError;
+        }
         console.error("[assistant-chat] Post-processing error:", postError);
-        // Still return the reply even if quota/telemetry fails
+        // Still return the reply even if telemetry fails
         return NextResponse.json({
           reply: finalReply,
           quotaRemaining: null,
@@ -434,19 +455,24 @@ export async function POST(req: Request) {
     }
 
     const rawError = lastError?.message || "All models failed";
-    console.error("[assistant-chat] Assistant failed across all models:", rawError);
+    console.error(
+      "[assistant-chat] Assistant failed across all models:",
+      rawError,
+    );
 
-    let errorMsg = "The AI Assistant is temporarily unavailable. Please try again in a few moments.";
+    let errorMsg =
+      "The AI Assistant is temporarily unavailable. Please try again in a few moments.";
     if (rawError.toLowerCase().includes("quota") || rawError.includes("429")) {
-      errorMsg = "Assistant is currently experiencing high demand. Please try again soon.";
-    } else if (rawError.toLowerCase().includes("not configured") || rawError.toLowerCase().includes("not found")) {
+      errorMsg =
+        "Assistant is currently experiencing high demand. Please try again soon.";
+    } else if (
+      rawError.toLowerCase().includes("not configured") ||
+      rawError.toLowerCase().includes("not found")
+    ) {
       errorMsg = "AI configuration is being updated. Please try again shortly.";
     }
 
-    return NextResponse.json(
-      { error: errorMsg },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: errorMsg }, { status: 503 });
   } catch (error: any) {
     const authError = toApiAuthErrorResponse(error);
     if (authError) return authError;

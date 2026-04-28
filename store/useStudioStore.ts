@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
+import { idbStorage } from "@/lib/idbStorage";
 
 export type SocialCard = {
   id: string;
@@ -40,6 +41,7 @@ interface StudioState {
   themeSettings: ThemeSettings;
   isGenerating: boolean;
   projectId: string | null;
+  projectName: string | null;
   quotaRemaining: number | null;
 
   // Generation chat history (prompt → carousel)
@@ -53,6 +55,9 @@ interface StudioState {
   undoStack: SocialCard[][];
   redoStack: SocialCard[][];
 
+  // Monotonically increasing counter to reliably detect state changes
+  studioVersion: number;
+
   setPrompt: (prompt: string) => void;
   setTone: (tone: string) => void;
   setPlatform: (platform: string) => void;
@@ -65,6 +70,7 @@ interface StudioState {
   updateTheme: (updates: Partial<ThemeSettings>) => void;
   setIsGenerating: (isGenerating: boolean) => void;
   setProjectId: (id: string | null) => void;
+  setProjectName: (name: string | null) => void;
   setQuotaRemaining: (val: number | null) => void;
   addChatMessage: (message: ChatMessage) => void;
   setChatHistory: (history: ChatMessage[]) => void;
@@ -88,6 +94,7 @@ const defaultTheme: ThemeSettings = {
 };
 
 const MAX_PERSISTED_DATA_URL_LENGTH = 12_000;
+const UNDO_STACK_LIMIT = 100;
 
 const sanitizePersistedCards = (cards: SocialCard[]): SocialCard[] =>
   cards.map((card) => {
@@ -104,6 +111,10 @@ const sanitizePersistedCards = (cards: SocialCard[]): SocialCard[] =>
     return card;
   });
 
+const truncateArray = <T>(arr: T[], limit: number): T[] => {
+  return arr.length > limit ? arr.slice(-limit) : arr;
+};
+
 export const useStudioStore = create<StudioState>()(
   persist(
     (set, get) => ({
@@ -112,17 +123,25 @@ export const useStudioStore = create<StudioState>()(
       platform: "Instagram Carousel",
       aspectRatio: "4:5",
       numCards: 5,
-      cards: [],
-      activeCardId: null,
+      cards: [
+        {
+          id: "default-slide-1",
+          title: "Slide 1",
+          content: "Add your text here...",
+        }
+      ],
+      activeCardId: "default-slide-1",
       themeSettings: defaultTheme,
       isGenerating: false,
       projectId: null,
+      projectName: null,
       quotaRemaining: null,
       chatHistory: [],
       assistantHistory: [],
       isAssistantThinking: false,
       undoStack: [],
       redoStack: [],
+      studioVersion: 0,
 
       setPrompt: (prompt) => set({ prompt }),
       setTone: (tone) => set({ tone }),
@@ -157,19 +176,22 @@ export const useStudioStore = create<StudioState>()(
         })),
       setIsGenerating: (isGenerating) => set({ isGenerating }),
       setProjectId: (projectId) => set({ projectId }),
+      setProjectName: (projectName) => set({ projectName }),
       setQuotaRemaining: (quotaRemaining) => set({ quotaRemaining }),
 
       addChatMessage: (message) =>
         set((state) => ({
           chatHistory: [...state.chatHistory, message],
+          studioVersion: state.studioVersion + 1,
         })),
-      setChatHistory: (chatHistory) => set({ chatHistory }),
+      setChatHistory: (chatHistory) => set((state) => ({ chatHistory, studioVersion: state.studioVersion + 1 })),
 
       addAssistantMessage: (message) =>
         set((state) => ({
           assistantHistory: [...state.assistantHistory, message],
+          studioVersion: state.studioVersion + 1,
         })),
-      setAssistantHistory: (assistantHistory) => set({ assistantHistory }),
+      setAssistantHistory: (assistantHistory) => set((state) => ({ assistantHistory, studioVersion: state.studioVersion + 1 })),
 
       setIsAssistantThinking: (isAssistantThinking) =>
         set({ isAssistantThinking }),
@@ -178,7 +200,9 @@ export const useStudioStore = create<StudioState>()(
 
       pushUndo: () =>
         set((state) => ({
-          undoStack: [...state.undoStack, structuredClone(state.cards)],
+          undoStack: [...state.undoStack, structuredClone(state.cards)].slice(
+            -UNDO_STACK_LIMIT,
+          ),
           redoStack: [],
         })),
 
@@ -202,29 +226,50 @@ export const useStudioStore = create<StudioState>()(
           const next = newRedo.pop()!;
           return {
             redoStack: newRedo,
-            undoStack: [...state.undoStack, structuredClone(state.cards)],
+            undoStack: [...state.undoStack, structuredClone(state.cards)].slice(
+              -UNDO_STACK_LIMIT,
+            ),
             cards: next,
             activeCardId: next.length > 0 ? next[0].id : null,
           };
         }),
 
-      reset: () =>
+      reset: () => {
+        const defaultCardId = "default-slide-1";
         set({
           prompt: "",
-          cards: [],
-          activeCardId: null,
+          tone: "Professional",
+          platform: "Instagram Carousel",
+          aspectRatio: "4:5",
+          numCards: 5,
+          cards: [
+            {
+              id: defaultCardId,
+              title: "Slide 1",
+              content: "Add your text here...",
+            },
+          ],
+          activeCardId: defaultCardId,
+          themeSettings: defaultTheme,
+          isGenerating: false,
+          isAssistantThinking: false,
           projectId: null,
+          projectName: null,
           quotaRemaining: null,
           chatHistory: [],
           assistantHistory: [],
-          isAssistantThinking: false,
           undoStack: [],
           redoStack: [],
-        }),
+          studioVersion: 0,
+        });
+      },
     }),
     {
       name: "social-studio-storage",
       partialize: (state) => ({
+        studioVersion: state.studioVersion,
+        projectId: state.projectId,
+        projectName: state.projectName,
         prompt: state.prompt,
         tone: state.tone,
         platform: state.platform,
@@ -232,9 +277,10 @@ export const useStudioStore = create<StudioState>()(
         numCards: state.numCards,
         cards: sanitizePersistedCards(state.cards),
         themeSettings: state.themeSettings,
-        chatHistory: state.chatHistory,
-        assistantHistory: state.assistantHistory,
+        chatHistory: truncateArray(state.chatHistory, UNDO_STACK_LIMIT),
+        assistantHistory: truncateArray(state.assistantHistory, UNDO_STACK_LIMIT),
       }),
+      storage: createJSONStorage(() => idbStorage),
     },
   ),
 );

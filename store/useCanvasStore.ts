@@ -2,10 +2,14 @@
 
 import type Konva from "konva";
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
-import type { SocialCard, ThemeSettings } from "@/store/useStudioStore";
+import { persist, createJSONStorage } from "zustand/middleware";
+import { idbStorage } from "@/lib/idbStorage";
+import {
+  useStudioStore,
+  type SocialCard,
+  type ThemeSettings,
+} from "@/store/useStudioStore";
 import type {
-  AspectRatio,
   CanvasHistorySnapshot,
   CanvasSlide,
   CanvasTool,
@@ -13,6 +17,7 @@ import type {
   SlideElement,
 } from "@/types/canvas";
 import { ASPECT_RATIO_DIMENSIONS } from "@/types/canvas";
+import { AspectRatio } from "@/lib/constants";
 
 const HISTORY_LIMIT = 100;
 const MAX_PERSISTED_DATA_URL_LENGTH = 12_000;
@@ -61,14 +66,15 @@ const defaultSlideFromCard = (
   theme: ThemeSettings,
 ): CanvasSlide => {
   const size = getCanvasSize(aspectRatio);
-  const padding = 80;
-  
-  // Professional distribution
-  const titleY = size.height * 0.12;
-  const imageY = size.height * 0.32;
-  const imageWidth = size.width * 0.88;
-  const imageHeight = size.height * 0.45;
-  const bodyY = size.height * 0.82;
+  const padding = theme.padding ?? 80;
+  const isCompact = theme.layoutEngine === "compact";
+
+  // Calculate vertical distribution based on layout engine
+  const titleY = isCompact ? size.height * 0.08 : size.height * 0.12;
+  const imageY = isCompact ? size.height * 0.22 : size.height * 0.32;
+  const imageWidth = isCompact ? size.width * 0.92 : size.width * 0.88;
+  const imageHeight = isCompact ? size.height * 0.55 : size.height * 0.45;
+  const bodyY = isCompact ? size.height * 0.85 : size.height * 0.82;
 
   const elements: SlideElement[] = [];
 
@@ -83,7 +89,7 @@ const defaultSlideFromCard = (
       width: imageWidth,
       height: imageHeight,
       opacity: 1,
-      cornerRadius: 32,
+      cornerRadius: theme.roundness ?? 32,
     });
   }
 
@@ -94,14 +100,15 @@ const defaultSlideFromCard = (
     text: card.title.toUpperCase(),
     x: padding,
     y: titleY,
-    width: size.width - padding * 2,
-    fontSize: theme.fontSize * 3.5,
+    width: Math.max(100, size.width - padding * 2),
+    fontSize: theme.fontSize * (isCompact ? 3 : 3.5),
     fontFamily: "Poppins",
     fontWeight: "800",
-    fill: "#111827",
+    fill: theme.primaryColor || "#111827",
     align: "center",
     lineHeight: 1.1,
     letterSpacing: 1,
+    role: "title",
   });
 
   // 3. Body (Centered bottom)
@@ -111,19 +118,21 @@ const defaultSlideFromCard = (
     text: card.content,
     x: padding * 1.5,
     y: bodyY,
-    width: size.width - padding * 3,
-    fontSize: theme.fontSize * 1.8,
+    width: Math.max(100, size.width - padding * 3),
+    fontSize: theme.fontSize * (isCompact ? 1.6 : 1.8),
     fontFamily: "Inter",
     fontWeight: "500",
     fill: "#6B7280",
     align: "center",
     lineHeight: 1.5,
+    role: "body",
   });
 
   return {
     cardId: card.id,
     backgroundColor: "#ffffff",
     elements,
+    ...(card.imageUrl ? { metadata: { autoSynced: true } } : {}),
   };
 };
 
@@ -190,7 +199,11 @@ type CanvasState = {
     theme: ThemeSettings,
   ) => void;
   syncCardContent: (card: SocialCard) => void;
-  syncCardImage: (cardId: string, imageUrl: string, targetElementId?: string) => void;
+  syncCardImage: (
+    cardId: string,
+    imageUrl: string,
+    targetElementId?: string,
+  ) => void;
   setCurrentSlideId: (cardId: string | null) => void;
   setSelectedElementIds: (ids: string[]) => void;
   toggleSelectedElementId: (id: string, additive?: boolean) => void;
@@ -198,7 +211,11 @@ type CanvasState = {
   setActiveTool: (tool: CanvasTool) => void;
   setBackgroundColor: (color: string) => void;
   addElement: (element: SlideElement) => void;
-  updateElement: (elementId: string, updates: Partial<SlideElement>) => void;
+  updateElement: (
+    elementId: string,
+    updates: Partial<SlideElement>,
+    cardId?: string,
+  ) => void;
   deleteSelected: (cardId?: string) => void;
   duplicateSelected: (cardId?: string) => void;
   copySelected: () => void;
@@ -228,7 +245,7 @@ export const useCanvasStore = create<CanvasState>()(
   persist(
     (set, get) => ({
       slidesByCardId: {},
-      currentSlideId: null,
+      currentSlideId: "default-slide-1",
       selectedElementIds: [],
       activeTool: "select",
       clipboard: null,
@@ -302,24 +319,25 @@ export const useCanvasStore = create<CanvasState>()(
           const slide = state.slidesByCardId[card.id];
           if (!slide) return state;
 
-          const titleElement = slide.elements.find(
-            (el) =>
-              el.type === "text" &&
-              (el.fontWeight === "800" || el.fontSize > 40),
-          );
-          const bodyElement = slide.elements.find(
-            (el) =>
-              el.type === "text" &&
-              el.id !== titleElement?.id &&
-              (el.fontWeight === "500" || el.fontSize < 40),
-          );
+          const titleElement =
+            slide.elements.find(
+              (el) => el.type === "text" && el.role === "title",
+            ) || slide.elements.find((el) => el.type === "text");
+
+          const bodyElement =
+            slide.elements.find(
+              (el) => el.type === "text" && el.role === "body",
+            ) ||
+            [...slide.elements]
+              .reverse()
+              .find((el) => el.type === "text" && el !== titleElement);
 
           let nextElements = [...slide.elements];
           let changed = false;
 
           // Sync Title
           if (titleElement && titleElement.type === "text") {
-            const transformedTitle = card.title.toUpperCase();
+            const transformedTitle = card.title;
             if (titleElement.text !== transformedTitle) {
               changed = true;
               nextElements = nextElements.map((el) =>
@@ -332,7 +350,10 @@ export const useCanvasStore = create<CanvasState>()(
 
           // Sync Body
           if (bodyElement) {
-            if (bodyElement.type === "text" && bodyElement.text !== card.content) {
+            if (
+              bodyElement.type === "text" &&
+              bodyElement.text !== card.content
+            ) {
               changed = true;
               nextElements = nextElements.map((el) =>
                 el.id === bodyElement.id ? { ...el, text: card.content } : el,
@@ -368,6 +389,7 @@ export const useCanvasStore = create<CanvasState>()(
                 ...state.slidesByCardId,
                 [cardId]: {
                   ...slide,
+                  metadata: { ...slide.metadata, autoSynced: true },
                   elements: slide.elements.map((el) =>
                     el.id === existingImage.id ? { ...el, src: imageUrl } : el,
                   ),
@@ -378,7 +400,8 @@ export const useCanvasStore = create<CanvasState>()(
 
           // If no image element, but we have an imageUrl, ADD IT.
           // This happens when image generation finishes AFTER the slide shell is created.
-          const currentAspectRatio = "4:5"; // Ideally tracked in store, but defaulting to portrait
+          const currentAspectRatio =
+            useStudioStore.getState().aspectRatio || "4:5";
           const size = getCanvasSize(currentAspectRatio);
           const imageWidth = size.width * 0.88;
           const imageHeight = size.height * 0.45;
@@ -401,6 +424,7 @@ export const useCanvasStore = create<CanvasState>()(
               ...state.slidesByCardId,
               [cardId]: {
                 ...slide,
+                metadata: { ...slide.metadata, autoSynced: true },
                 elements: [newImage, ...slide.elements], // Add to bottom (background-ish)
               },
             },
@@ -461,18 +485,28 @@ export const useCanvasStore = create<CanvasState>()(
           if (!current) return state;
           const slide = state.slidesByCardId[current];
           if (!slide) return state;
+
+          const newMetadata =
+            element.type === "image"
+              ? { ...slide.metadata, autoSynced: true }
+              : slide.metadata;
+
           return {
             slidesByCardId: {
               ...state.slidesByCardId,
-              [current]: { ...slide, elements: [...slide.elements, element] },
+              [current]: {
+                ...slide,
+                metadata: newMetadata,
+                elements: [...slide.elements, element],
+              },
             },
             selectedElementIds: [element.id],
           };
         }),
 
-      updateElement: (elementId, updates) =>
+      updateElement: (elementId, updates, cardId) =>
         set((state) => {
-          const current = state.currentSlideId;
+          const current = cardId ?? state.currentSlideId;
           if (!current) return state;
           const slide = state.slidesByCardId[current];
           if (!slide) return state;
@@ -861,12 +895,15 @@ export const useCanvasStore = create<CanvasState>()(
       reset: () =>
         set({
           slidesByCardId: {},
-          currentSlideId: null,
+          currentSlideId: "default-slide-1",
           selectedElementIds: [],
           activeTool: "select",
           clipboard: null,
           historyPast: [],
           historyFuture: [],
+          gridEnabled: false,
+          rulerEnabled: false,
+          stageRefs: {},
           textEditing: null,
         }),
     }),
@@ -879,6 +916,7 @@ export const useCanvasStore = create<CanvasState>()(
         gridEnabled: state.gridEnabled,
         rulerEnabled: state.rulerEnabled,
       }),
+      storage: createJSONStorage(() => idbStorage),
     },
   ),
 );

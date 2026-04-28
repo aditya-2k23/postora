@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type Konva from "konva";
 import type { SlideElement } from "@/types/canvas";
 
@@ -8,7 +8,7 @@ type Props = {
   stage: Konva.Stage | null;
   editingElementId: string | null;
   elements: SlideElement[];
-  onCommit: (nextValue: string) => void;
+  onCommit: (id: string, nextValue: string) => void;
   onCancel: () => void;
 };
 
@@ -20,7 +20,10 @@ export function TextEditorOverlay({
   onCancel,
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const didFinalizeRef = useRef(false);
+
+  const sessionIdRef = useRef<string | null>(null);
+  const committedRef = useRef(false);
+  const cancelledRef = useRef(false);
 
   const target = useMemo(
     () =>
@@ -31,11 +34,21 @@ export function TextEditorOverlay({
     [editingElementId, elements],
   );
 
-  const [draftValue, setDraftValue] = useState(() => target?.text ?? "");
+  const [draftValue, setDraftValue] = useState("");
+  const draftRef = useRef(draftValue);
 
+  // ── Core: whenever editingElementId changes, reset the session ──
   useEffect(() => {
-    didFinalizeRef.current = false;
-  }, [editingElementId]);
+    if (editingElementId !== sessionIdRef.current) {
+      sessionIdRef.current = editingElementId;
+      committedRef.current = false;
+      cancelledRef.current = false;
+
+      const initialText = target ? target.text : "";
+      setDraftValue(initialText);
+      draftRef.current = initialText;
+    }
+  }, [editingElementId, target]);
 
   const style = useMemo(() => {
     if (!stage || !target) return null;
@@ -80,22 +93,61 @@ export function TextEditorOverlay({
     } as const;
   }, [stage, target]);
 
+  // Auto-resize the textarea to fit its content so Shift+Enter newlines are visible,
+  // and sync the height change to the underlying Konva Text node so the Transformer
+  // (selection border / handles) follows along.
+  const autoResize = useCallback(
+    (nextText?: string) => {
+      const ta = textareaRef.current;
+      if (!ta) return;
+      // Reset to 0 so scrollHeight reflects actual content height, not the old container
+      ta.style.height = "0px";
+      ta.style.height = `${ta.scrollHeight}px`;
+
+      // Mirror the draft text onto the (invisible) Konva Text node so it
+      // recalculates its intrinsic height and the Transformer follows.
+      if (stage && sessionIdRef.current) {
+        const konvaNode = stage.findOne<Konva.Text>(`#${sessionIdRef.current}`);
+        if (konvaNode && nextText !== undefined) {
+          konvaNode.text(nextText);
+        }
+        // Force the Transformer to re-measure its attached nodes
+        const transformer = stage.findOne<Konva.Transformer>("Transformer");
+        if (transformer) {
+          transformer.forceUpdate();
+          transformer.getLayer()?.batchDraw();
+        }
+      }
+    },
+    [stage],
+  );
+
+  // Focus + select + size whenever we enter a new editing session
   useEffect(() => {
     if (!editingElementId || !textareaRef.current) return;
-    textareaRef.current.focus();
-    textareaRef.current.select();
-  }, [editingElementId]);
+    // Defer focus to the next frame so React has fully committed the DOM
+    requestAnimationFrame(() => {
+      const ta = textareaRef.current;
+      if (!ta) return;
+      ta.focus();
+      ta.select();
+      autoResize();
+    });
+  }, [editingElementId, autoResize]);
 
-  const finalizeCommit = () => {
-    if (didFinalizeRef.current) return;
-    didFinalizeRef.current = true;
-    onCommit(draftValue);
-  };
+  const handleCommit = useCallback(() => {
+    // Guard: only commit once per session, and only for the correct element
+    if (committedRef.current || cancelledRef.current) return;
+    const id = sessionIdRef.current;
+    if (!id) return;
+    committedRef.current = true;
+    onCommit(id, draftRef.current);
+  }, [onCommit]);
 
-  const finalizeCancel = () => {
-    didFinalizeRef.current = true;
+  const handleCancel = useCallback(() => {
+    cancelledRef.current = true;
     onCancel();
-  };
+  }, [onCancel]);
 
   if (!target || !style) return null;
 
@@ -105,18 +157,21 @@ export function TextEditorOverlay({
       value={draftValue}
       spellCheck={false}
       onChange={(evt) => {
-        setDraftValue(evt.target.value);
+        const val = evt.target.value;
+        setDraftValue(val);
+        draftRef.current = val;
+        autoResize(val);
       }}
-      onBlur={finalizeCommit}
+      onBlur={handleCommit}
       onKeyDown={(evt) => {
         if (evt.key === "Escape") {
           evt.preventDefault();
-          finalizeCancel();
+          handleCancel();
           return;
         }
         if (evt.key === "Enter" && !evt.shiftKey) {
           evt.preventDefault();
-          finalizeCommit();
+          handleCommit();
         }
       }}
       className="fixed z-[120] outline-none resize-none transition-opacity duration-100"

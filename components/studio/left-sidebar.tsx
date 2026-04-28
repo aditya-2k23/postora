@@ -1,6 +1,7 @@
 "use client";
 
 import { useStudioStore, type SocialCard } from "@/store/useStudioStore";
+import { useShallow } from "zustand/shallow";
 import { getAccessibleTextColor } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,7 +11,7 @@ import {
   MessageSquare,
   Zap,
   LayoutTemplate,
-  ChevronDown,
+  Lock,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -21,15 +22,6 @@ import {
   DropdownMenuLabel,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
 import { toast } from "sonner";
 import { useEffect, useRef, useState } from "react";
 import TextareaAutosize from "react-textarea-autosize";
@@ -103,39 +95,48 @@ export function LeftSidebar() {
   const router = useRouter();
 
   const {
-    prompt,
-    setPrompt,
     tone,
-    setTone,
     platform,
-    setPlatform,
     aspectRatio,
-    setAspectRatio,
     numCards,
-    setNumCards,
-    cards,
+    isGenerating,
+    chatHistory,
+    assistantHistory,
+    isAssistantThinking,
+    themeSettings,
+    quotaRemaining,
+  } = useStudioStore(
+    useShallow((s) => ({
+      tone: s.tone,
+      platform: s.platform,
+      aspectRatio: s.aspectRatio,
+      numCards: s.numCards,
+      isGenerating: s.isGenerating,
+      chatHistory: s.chatHistory,
+      assistantHistory: s.assistantHistory,
+      isAssistantThinking: s.isAssistantThinking,
+      themeSettings: s.themeSettings,
+      quotaRemaining: s.quotaRemaining,
+    })),
+  );
+
+  const hasCards = useStudioStore((s) => s.cards.length > 0);
+
+  const {
+    setPrompt,
     setCards,
     setActiveCardId,
-    projectId,
-    setProjectId,
-    isGenerating,
     setIsGenerating,
-    chatHistory,
     addChatMessage,
-    assistantHistory,
     addAssistantMessage,
-    isAssistantThinking,
     setIsAssistantThinking,
     clearAssistantHistory,
     pushUndo,
-    themeSettings,
-    quotaRemaining,
     setQuotaRemaining,
-  } = useStudioStore();
+  } = useStudioStore.getState();
 
   const [activeTab, setActiveTab] = useState<SidebarTab>("generate");
   const [inputValue, setInputValue] = useState("");
-  const [settingsExpanded, setSettingsExpanded] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const assistantEndRef = useRef<HTMLDivElement>(null);
 
@@ -164,10 +165,11 @@ export function LeftSidebar() {
 
   // ─── Generation flow ───
   const handleGenerate = async () => {
+    const { projectId, cards } = useStudioStore.getState();
     if (!projectId) {
       toast.error(
         "No active project. Please go to the Projects dashboard and create a new project first.",
-        { duration: 5000 }
+        { duration: 5000 },
       );
       router.push("/projects");
       return;
@@ -188,7 +190,9 @@ export function LeftSidebar() {
     }
 
     addChatMessage({ role: "user", text });
-    setPrompt(text);
+    // Only overwrite the project prompt on a fresh generation (no existing cards).
+    // For append operations, the original prompt should be preserved.
+    if (cards.length === 0) setPrompt(text);
     setInputValue("");
     setIsGenerating(true);
     clearAssistantHistory();
@@ -216,7 +220,14 @@ export function LeftSidebar() {
         }),
       });
 
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch (err) {
+        console.warn("[generate-content] Failed to parse response JSON:", err);
+        data = { error: `Server error: ${res.statusText || res.status}` };
+      }
+
       if (!res.ok) {
         if (res.status === 429) {
           throw new Error(
@@ -333,9 +344,20 @@ export function LeftSidebar() {
           }),
         });
 
-        const data = await res.json();
+        let data;
+        try {
+          data = await res.json();
+        } catch (err) {
+          console.warn(
+            "[generate-content] Failed to parse response JSON:",
+            err,
+          );
+          data = { error: `Server error: ${res.statusText || res.status}` };
+        }
+
         if (!res.ok) {
-          const errorMsg = data.error || `Error ${res.status}: ${res.statusText}`;
+          const errorMsg =
+            data.error || `Error ${res.status}: ${res.statusText}`;
           console.error(`[Image ${i + 1}] Generation failed:`, errorMsg);
           // Only toast first failure to avoid spamming 10+ toasts
           if (i === 0) {
@@ -389,7 +411,14 @@ export function LeftSidebar() {
         }),
       });
 
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch (err) {
+        console.warn("[generate-content] Failed to parse response JSON:", err);
+        data = {};
+      }
+
       if (res.ok && data.reply) {
         addAssistantMessage({ role: "assistant", text: data.reply });
         if (data.quotaRemaining !== undefined) {
@@ -407,6 +436,7 @@ export function LeftSidebar() {
   const handleAssistantSend = async () => {
     const text = inputValue.trim();
     if (!text) return;
+    const { cards, prompt } = useStudioStore.getState();
     if (cards.length === 0) {
       toast.error(
         "Generate a carousel first, then ask the assistant for help.",
@@ -458,7 +488,14 @@ export function LeftSidebar() {
         }),
       });
 
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch (err) {
+        console.warn("[generate-content] Failed to parse response JSON:", err);
+        data = { error: `Server error: ${res.statusText || res.status}` };
+      }
+
       if (!res.ok) {
         if (res.status === 429) {
           throw new Error(
@@ -474,7 +511,11 @@ export function LeftSidebar() {
         setQuotaRemaining(data.quotaRemaining);
       }
 
-      addAssistantMessage({ role: "assistant", text: data.reply });
+      if (typeof data.reply === "string" && data.reply.trim()) {
+        addAssistantMessage({ role: "assistant", text: data.reply });
+      } else {
+        throw new Error("Assistant returned an empty reply.");
+      }
     } catch (error: any) {
       addAssistantMessage({
         role: "assistant",
@@ -501,7 +542,6 @@ export function LeftSidebar() {
   };
 
   const accent = themeSettings.primaryColor;
-  const hasCards = cards.length > 0;
 
   return (
     <div className="w-full h-full bg-card flex flex-col shrink-0 z-10 text-foreground overflow-hidden">
@@ -517,22 +557,36 @@ export function LeftSidebar() {
           >
             <Sparkles className="w-3.5 h-3.5" />
           </div>
-          <span className="font-semibold text-sm text-foreground">
-            AI Assistant
-          </span>
+          <div className="flex flex-col">
+            <span className="font-semibold text-sm text-foreground leading-tight">
+              AI Assistant
+            </span>
+            <span className="text-[9px] text-muted-foreground opacity-80">
+              Use quick {activeTab === "generate" ? "templates" : "suggestions"} →
+            </span>
+          </div>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger
             className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-            title="Quick Templates"
+            title={
+              activeTab === "generate" ? "Quick Templates" : "Quick Suggestions"
+            }
           >
             <LayoutTemplate className="w-4 h-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuGroup>
-              <DropdownMenuLabel>Quick Templates</DropdownMenuLabel>
+              <DropdownMenuLabel>
+                {activeTab === "generate"
+                  ? "Quick Templates"
+                  : "Quick Suggestions"}
+              </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {QUICK_TEMPLATES.map((t) => (
+              {(activeTab === "generate"
+                ? QUICK_TEMPLATES
+                : ASSISTANT_PROMPTS
+              ).map((t) => (
                 <DropdownMenuItem
                   key={t.label}
                   onClick={() => setInputValue(t.prompt)}
@@ -588,355 +642,239 @@ export function LeftSidebar() {
         </button>
       </div>
 
-      {/* GENERATE TAB */}
-      {activeTab === "generate" && (
-        <>
-          {/* Generation Chat History */}
-          <div className="flex-1 overflow-y-auto p-4 min-h-0">
-            {chatHistory.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-center px-2">
-                <Sparkles className="w-8 h-8 text-muted-foreground/40 mb-3" />
-                <p className="text-xs text-muted-foreground">
-                  Describe your social media post idea and I&apos;ll generate it
-                  for you.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {chatHistory.map((msg, i) => (
-                  <div
-                    key={i}
-                    className={`rounded-lg p-3 text-xs leading-relaxed ${
-                      msg.role === "user"
-                        ? "border"
-                        : "bg-muted/50 border border-border"
-                    }`}
-                    style={
-                      msg.role === "user"
-                        ? {
-                            backgroundColor: `${accent}15`,
-                            borderColor: `${accent}30`,
-                          }
-                        : undefined
-                    }
-                  >
-                    <span
-                      className="font-semibold text-[10px] uppercase tracking-wider block mb-1"
-                      style={{
-                        color: msg.role === "user" ? accent : undefined,
-                      }}
-                    >
-                      {msg.role === "user" ? "You" : "Generator"}:
-                    </span>
-                    <span className="text-foreground/90">{msg.text}</span>
-                  </div>
-                ))}
-                <div ref={chatEndRef} />
-              </div>
-            )}
+      <div className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
+        {loading === false && !user && (
+          <div className="absolute inset-0 z-20 bg-background/80 backdrop-blur-[2px] flex flex-col items-center justify-center p-6 text-center">
+            <Lock className="w-8 h-8 text-muted-foreground mb-4 opacity-50" />
+            <h3 className="font-semibold text-foreground mb-2">Unlock AI Features</h3>
+            <p className="text-xs text-muted-foreground mb-4">
+              Sign up or log in to generate carousels, use AI coaching, and create custom images!
+            </p>
+            <Button 
+              onClick={() => router.push('/login?redirect=/studio&intent=ai')} 
+              className="w-full font-semibold shadow-sm"
+              style={{ backgroundColor: accent, color: getAccessibleTextColor(accent) }}
+            >
+              Sign Up to Unlock
+            </Button>
           </div>
+        )}
 
-          {/* Generation Input */}
-          <div className="p-4 pb-6 border-t border-border space-y-4">
-            <div className="flex items-end gap-2">
-              <div className="flex-1 relative">
-                <TextareaAutosize
-                  placeholder="Describe your post idea..."
-                  className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60 text-foreground transition-all shadow-sm min-h-[44px]"
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  minRows={1}
-                  maxRows={6}
-                />
-              </div>
-              <Button
-                onClick={handleSendClick}
-                disabled={isGenerating || !inputValue.trim()}
-                size="icon"
-                className="h-[36px] w-[36px] shrink-0 shadow-sm hover:opacity-90 rounded-lg mb-1"
-                style={{
-                  backgroundColor: accent,
-                  color: getAccessibleTextColor(accent),
-                }}
-              >
-                {isGenerating ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4" />
-                )}
-              </Button>
+        {/* GENERATE TAB */}
+        {activeTab === "generate" && (
+          <>
+            {/* Generation Chat History */}
+            <div className="flex-1 overflow-y-auto p-4 min-h-0">
+              {chatHistory.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-center px-2">
+                  <Sparkles className="w-8 h-8 text-muted-foreground/40 mb-3" />
+                  <p className="text-xs text-muted-foreground">
+                    Describe your social media post idea and I&apos;ll generate it
+                    for you.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {chatHistory.map((msg, i) => (
+                    <div
+                      key={i}
+                      className={`rounded-lg p-3 text-xs leading-relaxed ${
+                        msg.role === "user"
+                          ? "border"
+                          : "bg-muted/50 border border-border"
+                      }`}
+                      style={
+                        msg.role === "user"
+                          ? {
+                              backgroundColor: `${accent}15`,
+                              borderColor: `${accent}30`,
+                            }
+                          : undefined
+                      }
+                    >
+                      <span
+                        className="font-semibold text-[10px] uppercase tracking-wider block mb-1"
+                        style={{
+                          color: msg.role === "user" ? accent : undefined,
+                        }}
+                      >
+                        {msg.role === "user" ? "You" : "Generator"}:
+                      </span>
+                      <span className="text-foreground/90">{msg.text}</span>
+                    </div>
+                  ))}
+                  <div ref={chatEndRef} />
+                </div>
+              )}
             </div>
-            {quotaRemaining !== null && (
-              <div className="text-[10px] text-muted-foreground mt-1 flex items-center justify-between">
-                <span>Daily AI Quota:</span>
-                <span
-                  className={`font-medium ${quotaRemaining === 0 ? "text-red-500" : "text-foreground"}`}
-                >
-                  {quotaRemaining} left
-                </span>
-              </div>
-            )}
 
-            {/* Generation Settings */}
-            <div>
-              <button
-                onClick={() => setSettingsExpanded(!settingsExpanded)}
-                className="w-full flex items-center justify-between group outline-none"
-              >
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-foreground transition-colors mb-2">
-                  Generation Settings
-                </p>
-                <ChevronDown
-                  className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-200 mb-2 ${
-                    settingsExpanded ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
-
-              <div
-                className={`grid transition-all duration-300 ease-in-out ${
-                  settingsExpanded
-                    ? "grid-rows-[1fr] opacity-100 mb-2"
-                    : "grid-rows-[0fr] opacity-0"
-                }`}
-              >
-                <div className="overflow-hidden">
-                  <div className="grid grid-cols-2 gap-3 bg-muted/20 p-3 rounded-lg border border-border">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground font-medium">
-                        Tone
-                      </Label>
-                  <Select value={tone} onValueChange={(v) => v && setTone(v)}>
-                    <SelectTrigger className="h-8 text-xs bg-card">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TONES.map((t) => (
-                        <SelectItem key={t} value={t} className="text-xs">
-                          {t}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground font-medium">
-                    Platform
-                  </Label>
-                  <Select
-                    value={platform}
-                    onValueChange={(v) => v && setPlatform(v)}
-                  >
-                    <SelectTrigger className="h-8 text-xs bg-card">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PLATFORMS.map((p) => (
-                        <SelectItem key={p} value={p} className="text-xs">
-                          {p}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground font-medium">
-                    Aspect Ratio
-                  </Label>
-                  <Select
-                    value={aspectRatio}
-                    onValueChange={(v) => v && setAspectRatio(v)}
-                  >
-                    <SelectTrigger className="h-8 text-xs bg-card">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1:1" className="text-xs">
-                        1:1 Square
-                      </SelectItem>
-                      <SelectItem value="4:5" className="text-xs">
-                        4:5 Portrait
-                      </SelectItem>
-                      <SelectItem value="9:16" className="text-xs">
-                        9:16 Story
-                      </SelectItem>
-                      <SelectItem value="16:9" className="text-xs">
-                        16:9 Landscape
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center mb-1">
-                    <Label className="text-xs text-muted-foreground font-medium">
-                      Cards
-                    </Label>
-                    <span className="text-[10px] font-medium text-foreground bg-accent/50 px-1.5 py-0.5 rounded">
-                      {numCards}
-                    </span>
-                  </div>
-                  <Slider
-                    value={[numCards]}
-                    min={1}
-                    max={12}
-                    step={1}
-                    onValueChange={(val) =>
-                      setNumCards(Array.isArray(val) ? val[0] : val)
-                    }
+            {/* Generation Input */}
+            <div className="p-4 pb-6 border-t border-border space-y-4">
+              <div className="flex items-center gap-2">
+                <div className="flex-1 relative">
+                  <TextareaAutosize
+                    placeholder="Describe your post idea..."
+                    className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60 text-foreground transition-all shadow-sm min-h-[44px]"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    minRows={1}
+                    maxRows={6}
                   />
                 </div>
-              </div>
-            </div>
-            </div>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* ASSISTANT TAB */}
-      {activeTab === "assistant" && (
-        <>
-          {/* Assistant Chat */}
-          <div className="flex-1 overflow-y-auto p-4 min-h-0">
-            {!hasCards ? (
-              <div className="flex flex-col items-center justify-center h-full text-center px-2">
-                <MessageSquare className="w-8 h-8 text-muted-foreground/40 mb-3" />
-                <p className="text-xs text-muted-foreground">
-                  Generate a carousel first, then I&apos;ll help you improve it.
-                </p>
-              </div>
-            ) : assistantHistory.length === 0 && !isAssistantThinking ? (
-              <div className="flex flex-col items-center justify-center h-full text-center px-2">
-                <Sparkles className="w-8 h-8 text-muted-foreground/40 mb-3" />
-                <p className="text-xs text-muted-foreground mb-3">
-                  Your carousel is ready! Ask me anything about improving it.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {assistantHistory.map((msg, i) => (
-                  <div
-                    key={i}
-                    className={`rounded-lg p-3 text-xs leading-relaxed ${
-                      msg.role === "user"
-                        ? "border"
-                        : "bg-muted/50 border border-border"
-                    }`}
-                    style={
-                      msg.role === "user"
-                        ? {
-                            backgroundColor: `${accent}15`,
-                            borderColor: `${accent}30`,
-                          }
-                        : undefined
-                    }
-                  >
-                    <span
-                      className="font-semibold text-[10px] uppercase tracking-wider block mb-1"
-                      style={{
-                        color: msg.role === "user" ? accent : undefined,
-                      }}
-                    >
-                      {msg.role === "user" ? "You" : "Coach"}:
-                    </span>
-                    <span className="text-foreground/90 whitespace-pre-wrap">
-                      {msg.text}
-                    </span>
-                  </div>
-                ))}
-
-                {/* Thinking indicator */}
-                {isAssistantThinking && (
-                  <div className="rounded-lg p-3 text-xs bg-muted/50 border border-border">
-                    <span className="font-semibold text-[10px] uppercase tracking-wider block mb-1">
-                      Coach:
-                    </span>
-                    <span className="text-muted-foreground flex items-center gap-1.5">
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      Reviewing your carousel...
-                    </span>
-                  </div>
-                )}
-                <div ref={assistantEndRef} />
-              </div>
-            )}
-          </div>
-
-          {/* Assistant Input */}
-          <div className="p-4 pb-6 border-t border-border space-y-4">
-            <div className="flex items-end gap-2">
-              <div className="flex-1 relative">
-                <TextareaAutosize
-                  placeholder={
-                    hasCards
-                      ? "Ask about your carousel..."
-                      : "Generate a carousel first..."
-                  }
-                  className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60 text-foreground transition-all shadow-sm min-h-[44px]"
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  minRows={1}
-                  maxRows={6}
-                  disabled={!hasCards}
-                />
-              </div>
-              <Button
-                onClick={handleSendClick}
-                disabled={
-                  isAssistantThinking || !inputValue.trim() || !hasCards
-                }
-                size="icon"
-                className="h-[36px] w-[36px] shrink-0 shadow-sm hover:opacity-90 rounded-lg mb-1"
-                style={{
-                  backgroundColor: accent,
-                  color: getAccessibleTextColor(accent),
-                }}
-              >
-                {isAssistantThinking ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4" />
-                )}
-              </Button>
-            </div>
-            {quotaRemaining !== null && (
-              <div className="text-[10px] text-muted-foreground mt-1 flex items-center justify-between">
-                <span>Daily AI Quota:</span>
-                <span
-                  className={`font-medium ${quotaRemaining === 0 ? "text-red-500" : "text-foreground"}`}
+                <Button
+                  onClick={handleSendClick}
+                  disabled={isGenerating || !inputValue.trim()}
+                  size="icon"
+                  className="h-[36px] w-[36px] shrink-0 shadow-sm hover:opacity-90 rounded-lg"
+                  style={{
+                    backgroundColor: accent,
+                    color: getAccessibleTextColor(accent),
+                  }}
                 >
-                  {quotaRemaining} left
-                </span>
+                  {isGenerating ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </Button>
               </div>
-            )}
-
-            {/* Quick Assistant Prompts */}
-            {hasCards && (
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                  Quick Suggestions
-                </p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {ASSISTANT_PROMPTS.map((t) => (
-                    <button
-                      key={t.label}
-                      onClick={() => setInputValue(t.prompt)}
-                      className="text-[11px] px-2.5 py-1.5 rounded-md bg-muted/60 border border-border text-foreground/80 hover:bg-muted hover:text-foreground transition-colors text-left truncate"
-                    >
-                      {t.label}
-                    </button>
-                  ))}
+              {quotaRemaining !== null && (
+                <div className="text-[10px] text-muted-foreground mt-1 flex items-center justify-between">
+                  <span>Daily AI Quota:</span>
+                  <span
+                    className={`font-medium ${quotaRemaining === 0 ? "text-red-500" : "text-foreground"}`}
+                  >
+                    {quotaRemaining} left
+                  </span>
                 </div>
+              )}
+
+            </div>
+          </>
+        )}
+
+        {/* ASSISTANT TAB */}
+        {activeTab === "assistant" && (
+          <>
+            {/* Assistant Chat */}
+            <div className="flex-1 overflow-y-auto p-4 min-h-0">
+              {!hasCards ? (
+                <div className="flex flex-col items-center justify-center h-full text-center px-2">
+                  <MessageSquare className="w-8 h-8 text-muted-foreground/40 mb-3" />
+                  <p className="text-xs text-muted-foreground">
+                    Generate a carousel first, then I&apos;ll help you improve it.
+                  </p>
+                </div>
+              ) : assistantHistory.length === 0 && !isAssistantThinking ? (
+                <div className="flex flex-col items-center justify-center h-full text-center px-2">
+                  <Sparkles className="w-8 h-8 text-muted-foreground/40 mb-3" />
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Your carousel is ready! Ask me anything about improving it.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {assistantHistory.map((msg, i) => (
+                    <div
+                      key={i}
+                      className={`rounded-lg p-3 text-xs leading-relaxed ${
+                        msg.role === "user"
+                          ? "border"
+                          : "bg-muted/50 border border-border"
+                      }`}
+                      style={
+                        msg.role === "user"
+                          ? {
+                              backgroundColor: `${accent}15`,
+                              borderColor: `${accent}30`,
+                            }
+                          : undefined
+                      }
+                    >
+                      <span
+                        className="font-semibold text-[10px] uppercase tracking-wider block mb-1"
+                        style={{
+                          color: msg.role === "user" ? accent : undefined,
+                        }}
+                      >
+                        {msg.role === "user" ? "You" : "Coach"}:
+                      </span>
+                      <span className="text-foreground/90 whitespace-pre-wrap">
+                        {msg.text}
+                      </span>
+                    </div>
+                  ))}
+
+                  {/* Thinking indicator */}
+                  {isAssistantThinking && (
+                    <div className="rounded-lg p-3 text-xs bg-muted/50 border border-border">
+                      <span className="font-semibold text-[10px] uppercase tracking-wider block mb-1">
+                        Coach:
+                      </span>
+                      <span className="text-muted-foreground flex items-center gap-1.5">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Reviewing your carousel...
+                      </span>
+                    </div>
+                  )}
+                  <div ref={assistantEndRef} />
+                </div>
+              )}
+            </div>
+
+            {/* Assistant Input */}
+            <div className="p-4 pb-6 border-t border-border space-y-4">
+              <div className="flex items-center gap-2">
+                <div className="flex-1 relative">
+                  <TextareaAutosize
+                    placeholder={
+                      hasCards
+                        ? "Ask about your carousel..."
+                        : "Generate a carousel first..."
+                    }
+                    className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60 text-foreground transition-all shadow-sm min-h-[44px]"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    minRows={1}
+                    maxRows={6}
+                    disabled={!hasCards}
+                  />
+                </div>
+                <Button
+                  onClick={handleSendClick}
+                  disabled={
+                    isAssistantThinking || !inputValue.trim() || !hasCards
+                  }
+                  size="icon"
+                  className="h-[36px] w-[36px] shrink-0 shadow-sm hover:opacity-90 rounded-lg"
+                  style={{
+                    backgroundColor: accent,
+                    color: getAccessibleTextColor(accent),
+                  }}
+                >
+                  {isAssistantThinking ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </Button>
               </div>
-            )}
-          </div>
-        </>
-      )}
+              {quotaRemaining !== null && (
+                <div className="text-[10px] text-muted-foreground mt-1 flex items-center justify-between">
+                  <span>Daily AI Quota:</span>
+                  <span
+                    className={`font-medium ${quotaRemaining === 0 ? "text-red-500" : "text-foreground"}`}
+                  >
+                    {quotaRemaining} left
+                  </span>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

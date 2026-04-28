@@ -120,6 +120,7 @@ export function CanvasStage({
     visible: boolean;
   }>({ x: 0, y: 0, width: 0, height: 0, visible: false });
   const [textDraft, setTextDraft] = useState<TextDraftState | null>(null);
+  const newlyCreatedIdRef = useRef<string | null>(null);
 
   const fit = useMemo(() => {
     const scale = Math.min(
@@ -161,10 +162,42 @@ export function CanvasStage({
     return () => observer.disconnect();
   }, []);
 
+  const [stageReady, setStageReady] = useState(false);
   useEffect(() => {
-    if (stageRef.current) onStageReady(stageRef.current);
-    return () => onStageReady(null);
+    if (stageRef.current) {
+      setStageReady(true);
+      onStageReady(stageRef.current);
+    }
+    return () => {
+      setStageReady(false);
+      onStageReady(null);
+    };
   }, [onStageReady]);
+
+  useEffect(() => {
+    if (!stageRef.current) return;
+    const container = stageRef.current.container();
+    if (activeTool === "grab") {
+      container.style.cursor = "grab";
+    } else if (activeTool === "select") {
+      container.style.cursor = "default";
+    } else {
+      container.style.cursor = "crosshair";
+    }
+  }, [activeTool, stageReady]);
+
+
+  useEffect(() => {
+    if (!newlyCreatedIdRef.current) return;
+
+    const id = newlyCreatedIdRef.current;
+    const element = elements.find((el) => el.id === id);
+
+    if (element && element.type === "text") {
+      newlyCreatedIdRef.current = null;
+      onCreateText(element.id, element.text);
+    }
+  }, [elements, onCreateText]);
 
   const textDraftRect = useMemo(() => {
     if (!textDraft || activeTool !== "text") return null;
@@ -216,8 +249,9 @@ export function CanvasStage({
   };
 
   const createTextElement = (x: number, y: number, width: number) => {
+    const id = uid();
     const element: Extract<SlideElement, { type: "text" }> = {
-      id: uid(),
+      id,
       type: "text",
       text: "Edit text",
       x,
@@ -232,8 +266,8 @@ export function CanvasStage({
       letterSpacing: 0.2,
     };
     onPushHistory();
+    newlyCreatedIdRef.current = id;
     onAddElement(element);
-    onCreateText(element.id, element.text);
   };
 
   const createElementAtPoint = (x: number, y: number) => {
@@ -275,6 +309,11 @@ export function CanvasStage({
 
     const stage = evt.target.getStage();
     if (!stage) return;
+
+    // If we are currently editing text, let the TextEditorOverlay handle the commit via blur.
+    // We don't want to clear selection or start a new selection rect here yet.
+    if (editingElementId) return;
+
     const point = toCanvasPoint(stage);
     if (!point) return;
 
@@ -450,11 +489,11 @@ export function CanvasStage({
       className="relative w-full h-full bg-muted/20 overflow-hidden select-none"
       style={{
         cursor:
-          activeTool === "text"
-            ? "crosshair"
-            : activeTool === "grab"
-              ? "grab"
-              : "default",
+          activeTool === "grab"
+            ? "grab"
+            : activeTool === "select"
+              ? "default"
+              : "crosshair",
       }}
       onContextMenu={(evt) => {
         evt.preventDefault();

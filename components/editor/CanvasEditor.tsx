@@ -2,7 +2,11 @@
 
 import { useEffect, useState, useRef } from "react";
 import type Konva from "konva";
-import { ASPECT_RATIO_DIMENSIONS, type AspectRatio } from "@/types/canvas";
+import {
+  ASPECT_RATIO_DIMENSIONS,
+  SlideElement,
+} from "@/types/canvas";
+import { type AspectRatio } from "@/lib/constants";
 import { useShallow } from "zustand/shallow";
 import { useCanvasStore } from "@/store/useCanvasStore";
 import { useStudioStore } from "@/store/useStudioStore";
@@ -12,26 +16,27 @@ import { TextEditorOverlay } from "@/components/editor/TextEditorOverlay";
 import { LayoutTemplate } from "lucide-react";
 
 const isTypingTarget = (target: EventTarget | null) => {
-  if (!(target instanceof HTMLElement)) return false;
-
-  const tag = target.tagName;
+  if (!target) return false;
+  const el = target as HTMLElement;
+  const tag = el.tagName?.toUpperCase();
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
     return true;
   }
-
-  if (target.isContentEditable) return true;
-  return Boolean(target.closest("[contenteditable='true']"));
+  if (el.isContentEditable) return true;
+  return !!(el.closest && el.closest("[contenteditable='true']"));
 };
 
 export function CanvasEditor() {
-  const { cards, activeCardId, aspectRatio, themeSettings } = useStudioStore(
-    useShallow((s) => ({
-      cards: s.cards,
-      activeCardId: s.activeCardId,
-      aspectRatio: s.aspectRatio,
-      themeSettings: s.themeSettings,
-    })),
-  );
+  const { cards, activeCardId, aspectRatio, updateCard, themeSettings } =
+    useStudioStore(
+      useShallow((s) => ({
+        cards: s.cards,
+        activeCardId: s.activeCardId,
+        aspectRatio: s.aspectRatio,
+        updateCard: s.updateCard,
+        themeSettings: s.themeSettings,
+      })),
+    );
 
   const {
     slidesByCardId,
@@ -44,22 +49,6 @@ export function CanvasEditor() {
     gridEnabled,
     rulerEnabled,
     textEditing,
-  } = useCanvasStore(
-    useShallow((s) => ({
-      slidesByCardId: s.slidesByCardId,
-      currentSlideId: s.currentSlideId,
-      selectedElementIds: s.selectedElementIds,
-      activeTool: s.activeTool,
-      clipboard: s.clipboard,
-      historyPast: s.historyPast,
-      historyFuture: s.historyFuture,
-      gridEnabled: s.gridEnabled,
-      rulerEnabled: s.rulerEnabled,
-      textEditing: s.textEditing,
-    })),
-  );
-
-  const {
     ensureSlidesFromCards,
     syncCardContent,
     syncCardImage,
@@ -85,7 +74,45 @@ export function CanvasEditor() {
     setStageRef,
     startTextEditing,
     stopTextEditing,
-  } = useCanvasStore.getState();
+  } = useCanvasStore(
+    useShallow((s) => ({
+      slidesByCardId: s.slidesByCardId,
+      currentSlideId: s.currentSlideId,
+      selectedElementIds: s.selectedElementIds,
+      activeTool: s.activeTool,
+      clipboard: s.clipboard,
+      historyPast: s.historyPast,
+      historyFuture: s.historyFuture,
+      gridEnabled: s.gridEnabled,
+      rulerEnabled: s.rulerEnabled,
+      textEditing: s.textEditing,
+      ensureSlidesFromCards: s.ensureSlidesFromCards,
+      syncCardContent: s.syncCardContent,
+      syncCardImage: s.syncCardImage,
+      setCurrentSlideId: s.setCurrentSlideId,
+      setSelectedElementIds: s.setSelectedElementIds,
+      toggleSelectedElementId: s.toggleSelectedElementId,
+      clearSelection: s.clearSelection,
+      setActiveTool: s.setActiveTool,
+      addElement: s.addElement,
+      updateElement: s.updateElement,
+      pushHistory: s.pushHistory,
+      deleteSelected: s.deleteSelected,
+      duplicateSelected: s.duplicateSelected,
+      copySelected: s.copySelected,
+      pasteClipboard: s.pasteClipboard,
+      moveSelectedBy: s.moveSelectedBy,
+      bringForward: s.bringForward,
+      sendBackward: s.sendBackward,
+      undo: s.undo,
+      redo: s.redo,
+      setGridEnabled: s.setGridEnabled,
+      setRulerEnabled: s.setRulerEnabled,
+      setStageRef: s.setStageRef,
+      startTextEditing: s.startTextEditing,
+      stopTextEditing: s.stopTextEditing,
+    })),
+  );
 
   const [stage, setStage] = useState<Konva.Stage | null>(null);
   const slideId = activeCardId ?? currentSlideId;
@@ -106,19 +133,38 @@ export function CanvasEditor() {
     ensureSlidesFromCards(cards, aspectRatio, themeSettings);
   }, [cards, aspectRatio, themeSettings, ensureSlidesFromCards]);
 
+  // Sync card content → canvas elements, but ONLY when cards change.
+  // We intentionally exclude slidesByCardId from deps to avoid a race:
+  // canvas edits update slidesByCardId first, and if this effect fires before
+  // the studio store (cards) is updated, it would overwrite the edit with stale card text.
+  // We also skip entirely while the user is actively editing text on the canvas.
   useEffect(() => {
+    // Don't overwrite element text while the user is editing inline
+    if (textEditing) return;
+
     cards.forEach((card) => {
       syncCardContent(card);
-      
-      const slide = slidesByCardId[card.id];
-      const hasImage = slide?.elements.some(el => el.type === 'image');
-      
-      // Only auto-sync image if the slide has no image yet and card has one
-      if (card.imageUrl && !hasImage) {
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cards, syncCardContent]);
+
+  // Sync card images separately — this one legitimately needs slidesByCardId
+  // to check whether an image element already exists.
+  useEffect(() => {
+    cards.forEach((card) => {
+      const cardSlide = slidesByCardId[card.id];
+      if (!cardSlide) return;
+
+      const hasImage = cardSlide.elements.some((el) => el.type === "image");
+      const isUnpopulated = cardSlide.metadata?.autoSynced !== true;
+
+      // Only auto-sync image if card has one and the slide hasn't been synced or is empty
+      // This prevents resurrecting images the user might have deleted.
+      if (card.imageUrl && !hasImage && isUnpopulated) {
         syncCardImage(card.id, card.imageUrl);
       }
     });
-  }, [cards, syncCardContent, syncCardImage]);
+  }, [cards, syncCardImage, slidesByCardId]);
 
   useEffect(() => {
     if (activeCardId && activeCardId !== currentSlideId) {
@@ -146,15 +192,24 @@ export function CanvasEditor() {
       const target = evt.target as HTMLElement;
 
       // 1. Check for global commands that we want to intercept early
-      // Note: We use capturing phase to beat browser defaults like Ctrl+D (bookmark), Ctrl+Y (history)
-      const isShortcut = isMeta && (key === "d" || key === "z" || key === "y" || key === "c" || key === "v" || key === "s");
+      // Note: We actively use the capturing phase to intercept browser defaults 
+      // like Ctrl+D (bookmark) or Ctrl+Y (history) before they run.
+      const isShortcut =
+        isMeta &&
+        (key === "d" ||
+          key === "z" ||
+          key === "y" ||
+          key === "c" ||
+          key === "v" ||
+          key === "s");
       const isDelete = key === "delete" || key === "backspace";
 
       if ((isShortcut || isDelete) && !isTypingTarget(target)) {
         if (isMeta && key === "d") evt.preventDefault();
         if (isMeta && key === "z") evt.preventDefault();
         if (isMeta && key === "y") evt.preventDefault();
-        if (isDelete && selectedElementIdsRef.current.length > 0) evt.preventDefault();
+        if (isDelete && selectedElementIdsRef.current.length > 0)
+          evt.preventDefault();
       }
 
       if (isTypingTarget(target)) return;
@@ -174,6 +229,20 @@ export function CanvasEditor() {
         return;
       }
 
+      // Grid/Ruler shortcuts (Shift + G / Shift + R)
+      if (evt.shiftKey && !isMeta) {
+        if (key === "g") {
+          evt.preventDefault();
+          setGridEnabled(!gridEnabled);
+          return;
+        }
+        if (key === "r") {
+          evt.preventDefault();
+          setRulerEnabled(!rulerEnabled);
+          return;
+        }
+      }
+
       // Tool selection shortcuts
       if (!isMeta) {
         if (key === "v" || key === "escape") {
@@ -184,7 +253,7 @@ export function CanvasEditor() {
           setActiveTool("text");
           return;
         }
-        if (key === "h") {
+        if (key === "g") {
           setActiveTool("grab");
           return;
         }
@@ -203,7 +272,8 @@ export function CanvasEditor() {
         return;
       }
 
-      if (isMeta && (key === "v" && isMeta)) { // Handle Ctrl+V separately to allow single-key 'v' for tool
+      if (isMeta && key === "v") {
+        // Handle Ctrl+V separately to allow single-key 'v' for tool
         evt.preventDefault();
         pushHistory();
         pasteClipboard();
@@ -223,7 +293,7 @@ export function CanvasEditor() {
         }
         return;
       }
-      
+
       if (evt.key.startsWith("Arrow")) {
         const amount = evt.shiftKey ? 10 : 1;
         if (selectedElementIdsRef.current.length === 0) return;
@@ -236,8 +306,8 @@ export function CanvasEditor() {
       }
     };
 
-    window.addEventListener("keydown", handler, true); // Use capture to intercept before browser defaults
-    return () => window.removeEventListener("keydown", handler, true);
+    window.addEventListener("keydown", handler, { capture: true, passive: false });
+    return () => window.removeEventListener("keydown", handler, { capture: true });
   }, [
     copySelected,
     pasteClipboard,
@@ -248,6 +318,10 @@ export function CanvasEditor() {
     redo,
     setActiveTool,
     moveSelectedBy,
+    gridEnabled,
+    rulerEnabled,
+    setGridEnabled,
+    setRulerEnabled,
   ]);
 
   if (!cards.length || !slide) {
@@ -324,7 +398,14 @@ export function CanvasEditor() {
             startTextEditing(id, value);
           }}
           onDoubleClickText={(id) => {
-            const node = slide.elements.find(
+            // Just start editing the new element. The TextEditorOverlay
+            // handles the transition internally: its blur will commit the
+            // old element (via sessionIdRef), and its useEffect will reset
+            // draftValue to the new element's text when editingElementId changes.
+            const latestState = useCanvasStore.getState();
+            const sid = activeCardId ?? latestState.currentSlideId;
+            const latestSlide = sid ? latestState.slidesByCardId[sid] : null;
+            const node = latestSlide?.elements.find(
               (el) => el.id === id && el.type === "text",
             );
             if (node?.type === "text") {
@@ -334,22 +415,53 @@ export function CanvasEditor() {
         />
 
         <TextEditorOverlay
-          key={textEditing?.elementId ?? "none"}
           stage={stage}
           editingElementId={textEditing?.elementId ?? null}
           elements={slide.elements}
-          onCommit={(value) => {
-            if (!textEditing?.elementId) return;
-            const currentText = slide.elements.find(
-              (el) => el.type === "text" && el.id === textEditing.elementId,
-            );
-            if (currentText?.type === "text" && currentText.text === value) {
+          onCommit={(id, value) => {
+            // Get the latest state from the store to avoid closure staleness
+            const state = useCanvasStore.getState();
+            const slideId = activeCardId ?? state.currentSlideId;
+            const currentSlide = slideId ? state.slidesByCardId[slideId] : null;
+
+            if (!currentSlide) {
               stopTextEditing();
               return;
             }
-            pushHistory();
-            updateElement(textEditing.elementId, { text: value });
-            stopTextEditing();
+
+            const currentElement = currentSlide.elements.find(
+              (el): el is Extract<SlideElement, { type: "text" }> =>
+                el.type === "text" && el.id === id,
+            );
+
+            if (!currentElement) {
+              stopTextEditing();
+              return;
+            }
+
+            // Only update if value actually changed
+            if (currentElement.text !== value) {
+              pushHistory();
+              updateElement(id, { text: value }, slideId ?? undefined);
+
+              // Sync back to card
+              if (activeCardId) {
+                if (currentElement.role === "title") {
+                  updateCard(activeCardId, { title: value });
+                } else if (currentElement.role === "body") {
+                  updateCard(activeCardId, { content: value });
+                }
+              }
+            }
+
+            // If a new editing session has already started on a different element
+            // (e.g. user double-clicked another textbox), DON'T stop editing —
+            // the overlay already transitioned to the new element.
+            const currentEditing = useCanvasStore.getState().textEditing;
+            if (!currentEditing || currentEditing.elementId === id) {
+              stopTextEditing();
+              clearSelection();
+            }
           }}
           onCancel={stopTextEditing}
         />
